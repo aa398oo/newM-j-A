@@ -125,7 +125,7 @@ bool resolveCriticalInput() {
          reinterpret_cast<void*>(g_criticalReset),
          reinterpret_cast<void*>(g_criticalSetStackqueue));
     // 切到「输入进队列、渲染线程 pump」模式：否则 critical_* 会在调用线程直接执行
-    // MouseHandler 回调，和渲染线程写同一批字段（豆包指出的数据竞争）。
+    // MouseHandler 回调，和渲染线程写同一批字段（参考文献指出的数据竞争）。
     if (g_criticalSetStackqueue != nullptr && !g_stackQueueEnabled) {
         g_criticalSetStackqueue(1);
         g_stackQueueEnabled = true;
