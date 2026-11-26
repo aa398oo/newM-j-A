@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 图标底色：DESIGN-STYLE 背景 base #0E1116，不用 FCL 草绿。 -->
+    <color name="ic_launcher_background">#FF0E1116</color>
+    <!-- 窗口底色与 Compose 主题一致，避免冷启动白闪。 -->
+    <color name="window_background">#FF0E1116</color>
+</resources>

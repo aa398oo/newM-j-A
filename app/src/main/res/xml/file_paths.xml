@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 诊断包写到 cacheDir/diagnostics，通过 FileProvider 分享给其他应用。 -->
+    <cache-path name="diagnostics" path="diagnostics/" />
+</paths>

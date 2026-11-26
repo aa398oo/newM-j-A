@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 界面是 Compose 暗色主题；XML 主题只负责窗口底色与启动瞬间，别让它白闪。 -->
+    <style name="Theme.Mineport" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@color/window_background</item>
+        <item name="android:navigationBarColor">@color/window_background</item>
+    </style>
+
+    <!-- 游戏窗口：纯黑背景，避免启动瞬间白屏。 -->
+    <style name="Theme.Mineport.Game" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>
