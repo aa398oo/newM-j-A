@@ -53,6 +53,7 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
     var results by remember { mutableStateOf<List<ModrinthHit>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var progress by remember { mutableStateOf<String?>(null) }
 
     val modsDir = File(context.filesDir, "instances/" + instance.gameDirName + "/mods")
 
@@ -152,7 +153,15 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.padding(4.dp))
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(2.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                progress ?: "处理中…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
 
@@ -181,17 +190,22 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
                                     TextButton(onClick = {
                                         scope.launch {
                                             loading = true
+                                            progress = "准备中…"
                                             ModInstaller.install(
                                                 projectId = hit.project_id,
                                                 gameVersion = instance.minecraftVersion,
                                                 loader = loader,
-                                                modsDir = modsDir
+                                                modsDir = modsDir,
+                                                onFile = { label, done, total ->
+                                                    progress = done.toString() + "/" + total + " " + label
+                                                }
                                             ).onSuccess { count ->
-                                                message = "已安装 " + count + " 个文件到 " +
-                                                    modsDir.absolutePath
+                                                refreshInstalled()
+                                                message = "已安装 " + count + " 个文件（含依赖）"
                                             }.onFailure { error ->
                                                 message = "安装失败：" + (error.message ?: "未知错误")
                                             }
+                                            progress = null
                                             loading = false
                                         }
                                     }) { Text("安装") }
