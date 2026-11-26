@@ -2,7 +2,7 @@
 # 用法: pwsh -File X:\android\scripts\verify-touch.ps1
 
 param(
-    [string]$Serial = 'HUPFIZ794HYD4X49',
+    [string]$Serial = '<DEVICE_SERIAL>',
     [string]$InstanceId = 'c9d58e86-4a5f-4b89-af43-a055bef2f757',
     [string]$Apk = 'X:\android\app\build\outputs\apk\debug\app-debug.apk',
     [string]$Adb = 'X:\android\.toolchain\sdk\platform-tools\adb.exe',

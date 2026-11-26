@@ -39,12 +39,12 @@ $env:GRADLE_USER_HOME="X:\android\.toolchain\gradle-home"
 
 1. 代理并发下载全部断流 → 改国内镜像直连（清华 Adoptium、腾讯 Gradle、dl.google.com）。
 2. Gradle daemon `java.net.BindException` → 清空 `GRADLE_USER_HOME/daemon` 与 `~/.gradle/daemon`。
-3. AGP 拒绝中文路径（`适配项目`）→ 用 `subst X: C:\Users\as150\Downloads\适配项目` 构建。
+3. AGP 拒绝中文路径（`适配项目`）→ 用 `subst X: C:\Users\<you>\Downloads\适配项目` 构建。
 4. Kotlin 编译器要写系统 TEMP 被沙箱拒绝 → `TEMP/TMP` 指向 `X:\android\.toolchain\tmp`。
 5. Kotlin 嵌套注释：KDoc 里出现 `*.so`、`runtime/**` 会触发 → 改写文案。
 6. `android.content.pm.SystemFeatures` 不可用 → DeviceProfile 置空。
 7. `AttachCurrentThread` 参数类型 → 传 `JNIEnv**`。
-8. `C:\Users\as150\.android\debug.keystore.lock` 不可写 → 改用工程内 keystore（见二）。
+8. `C:\Users\<you>\.android\debug.keystore.lock` 不可写 → 改用工程内 keystore（见二）。
 
 ## 四、真机首测结论（2026-11-22，Android 16 / MT6989）
 

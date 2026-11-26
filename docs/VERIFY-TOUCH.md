@@ -8,7 +8,7 @@
 ```powershell
 $env:TEMP = "X:\android\.toolchain\tmp"; $env:TMP = $env:TEMP
 $adb = "X:\android\.toolchain\sdk\platform-tools\adb.exe"
-& $adb devices                # 期望出现 HUPFIZ794HYD4X49  device
+& $adb devices                # 期望出现 <DEVICE_SERIAL>  device
 & $adb install -r X:\android\app\build\outputs\apk\debug\app-debug.apk
 & $adb shell run-as dev.mineport.launcher rm -f files/touch.log
 & $adb logcat -c

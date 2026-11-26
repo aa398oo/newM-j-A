@@ -12,7 +12,7 @@ android {
     ndkVersion = "27.0.12077973"
 
     signingConfigs {
-        // 工程内 keystore：C:\Users\as150\.android 对 Gradle 进程不可写，
+        // 工程内 keystore：C:\Users\<you>\.android 对 Gradle 进程不可写，
         // 用默认 debug keystore 会在 validateSigningDebug 阶段报 AccessDenied。
         create("debugLocal") {
             storeFile = rootProject.file(".keystore/debug.keystore")
