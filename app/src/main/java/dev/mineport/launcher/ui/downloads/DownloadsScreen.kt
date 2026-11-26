@@ -1,4 +1,4 @@
-package dev.mineport.launcher.ui.downloads
+﻿package dev.mineport.launcher.ui.downloads
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,6 +37,9 @@ import dev.mineport.launcher.download.VersionManifest
 import dev.mineport.launcher.download.VersionManifestClient
 import dev.mineport.launcher.install.InstallReport
 import dev.mineport.launcher.install.VersionInstaller
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import dev.mineport.launcher.ui.components.EmptyState
 import dev.mineport.launcher.ui.motion.EnterFromBottom
 import dev.mineport.launcher.ui.motion.PixelDotsLoading
 import java.io.File
@@ -293,6 +296,15 @@ private fun ReadyBlock(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
         ) {
+            if (shown.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Filled.Search,
+                        title = "没有匹配的版本",
+                        hint = "试着输入完整版本号，例如 1.20.1；或清空搜索框看全部版本。"
+                    )
+                }
+            }
             items(shown, key = { it.id }) { version ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),

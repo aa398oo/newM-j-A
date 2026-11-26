@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
+import dev.mineport.launcher.ui.components.EmptyState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -165,10 +166,10 @@ fun InstancesScreen(container: AppContainer) {
         ) {
             if (instances.isEmpty()) {
                 item {
-                    Text(
-                        "暂无实例",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 24.dp)
+                    EmptyState(
+                        icon = Icons.Filled.Add,
+                        title = "还没有实例",
+                        hint = "每个实例是一份独立的游戏目录：版本、加载器、模组互不干扰。\n先在「下载」里装一个版本，或用右下角 + 手动新建。"
                     )
                 }
             }

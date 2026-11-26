@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 图标前景：方块化字母 M（设计规范 八：方块化字母、青绿单色、不用渐变）。 -->
+<!--
+  图标前景：方块化字母 M（DESIGN-STYLE 八：方块化字母、青绿单色、不用渐变）。
+  比例调整：M 占满安全区（108 的 15%–85%），比原来 20%–80% 更饱满，缩到 48dp 时更清楚。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- M 的左竖 -->
     <path
         android:fillColor="#22D3A6"
-        android:pathData="M20,20h13v13h-13z M75,20h13v13h-13z M20,33h13v13h-13z M33,33h13v13h-13z M62,33h13v13h-13z M75,33h13v13h-13z M20,46h13v13h-13z M46,46h13v13h-13z M75,46h13v13h-13z M20,59h13v13h-13z M75,59h13v13h-13z M20,72h13v13h-13z M75,72h13v13h-13z" />
+        android:pathData="M16,16h14v14h-14z M16,30h14v14h-14z M16,44h14v14h-14z M16,58h14v14h-14z M16,72h14v14h-14z M16,86h14v6h-14z" />
+    <!-- M 的右竖 -->
+    <path
+        android:fillColor="#22D3A6"
+        android:pathData="M78,16h14v14h-14z M78,30h14v14h-14z M78,44h14v14h-14z M78,58h14v14h-14z M78,72h14v14h-14z M78,86h14v6h-14z" />
+    <!-- M 的中间 V 形（两级下探） -->
+    <path
+        android:fillColor="#22D3A6"
+        android:pathData="M30,16h14v14h-14z M64,16h14v14h-14z M44,30h14v14h-14z M50,44h14v14h-14z M64,30h-14v14h14z" />
+    <!-- 中心信号点：一个更亮的像素，作为品牌记号 -->
+    <path
+        android:fillColor="#4ADE80"
+        android:pathData="M50,58h14v14h-14z" />
 </vector>
