@@ -24,13 +24,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.mineport.launcher.data.GameInstance
 import dev.mineport.launcher.mod.ModInstaller
 import dev.mineport.launcher.mod.ModrinthClient
 import dev.mineport.launcher.mod.ModrinthHit
+import dev.mineport.launcher.mod.ModrinthClient.ResolvedMod
+import dev.mineport.launcher.ui.theme.mono
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
@@ -45,6 +49,7 @@ import java.util.Locale
 @Composable
 fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val loader = instance.loader.name.lowercase(Locale.US)
     val supported = loader != "vanilla"
@@ -54,6 +59,8 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableStateOf<String?>(null) }
+    // UX-04：先解析依赖、展示清单，确认后才真正下载
+    var pendingPlan by remember { mutableStateOf<Pair<ModrinthHit, List<ResolvedMod>>?>(null) }
 
     val modsDir = File(context.filesDir, "instances/" + instance.gameDirName + "/mods")
 
@@ -65,6 +72,17 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
             ?: emptyList()
     }
     LaunchedEffect(modsDir.path) { refreshInstalled() }
+
+    // UX-03：按 slug 前缀判断是否已装（Modrinth 文件名一般是 <slug>-<version>.jar）。
+    // 宁可漏判也不要误判：slug 为空一律当作未安装。
+    val installedNames = remember(installed) {
+        installed.map { it.name.lowercase(Locale.US) }
+    }
+    fun isInstalled(slug: String): Boolean {
+        val key = slug.lowercase(Locale.US)
+        if (key.isBlank()) return false
+        return installedNames.any { it.startsWith(key + "-") || it.startsWith(key + "_") }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -88,6 +106,24 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        // UX-07：想看/想手动放 jar 时，至少能拿到路径
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                modsDir.absolutePath,
+                                style = MaterialTheme.typography.bodySmall.mono(),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = {
+                                clipboard.setText(AnnotatedString(modsDir.absolutePath))
+                                message = "路径已复制"
+                            }) { Text("复制路径") }
+                        }
                     }
                     installed.take(6).forEach { file ->
                         Row(
@@ -169,6 +205,69 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
                         Text(it, style = MaterialTheme.typography.bodySmall)
                     }
 
+                    // UX-04：确认前先亮清单，避免「点一个装了三个」
+                    pendingPlan?.let { (planHit, mods) ->
+                        Column(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                "将安装 " + mods.size + " 个文件" +
+                                    if (mods.size > 1) "（含 " + (mods.size - 1) + " 个依赖）" else "",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            mods.take(5).forEach { resolved ->
+                                Text(
+                                    "· " + (resolved.version.files.firstOrNull { it.primary }?.filename
+                                        ?: resolved.version.version_number),
+                                    style = MaterialTheme.typography.bodySmall.mono(),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (mods.size > 5) {
+                                Text(
+                                    "…另有 " + (mods.size - 5) + " 个",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(
+                                    enabled = !loading,
+                                    onClick = {
+                                        scope.launch {
+                                            loading = true
+                                            progress = "准备中…"
+                                            ModInstaller.install(
+                                                projectId = planHit.project_id,
+                                                gameVersion = instance.minecraftVersion,
+                                                loader = loader,
+                                                modsDir = modsDir,
+                                                onFile = { label, done, total ->
+                                                    progress = done.toString() + "/" + total + " " + label
+                                                }
+                                            ).onSuccess { count ->
+                                                refreshInstalled()
+                                                message = "已安装 " + count + " 个文件（含依赖）"
+                                            }.onFailure { error ->
+                                                message = "安装失败：" + (error.message ?: "未知错误")
+                                            }
+                                            pendingPlan = null
+                                            progress = null
+                                            loading = false
+                                        }
+                                    }
+                                ) { Text("开始下载") }
+                                TextButton(
+                                    enabled = !loading,
+                                    onClick = { pendingPlan = null }
+                                ) { Text("取消") }
+                            }
+                        }
+                    }
+
                     LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
                         items(results, key = { it.project_id }) { hit ->
                             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -187,28 +286,29 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            loading = true
-                                            progress = "准备中…"
-                                            ModInstaller.install(
-                                                projectId = hit.project_id,
-                                                gameVersion = instance.minecraftVersion,
-                                                loader = loader,
-                                                modsDir = modsDir,
-                                                onFile = { label, done, total ->
-                                                    progress = done.toString() + "/" + total + " " + label
+                                    val alreadyIn = isInstalled(hit.slug)
+                                    TextButton(
+                                        enabled = !loading && !alreadyIn,
+                                        onClick = {
+                                            scope.launch {
+                                                loading = true
+                                                progress = "解析依赖…"
+                                                ModrinthClient.resolveDependencies(
+                                                    rootProjectId = hit.project_id,
+                                                    gameVersion = instance.minecraftVersion,
+                                                    loader = loader
+                                                ).let { plan ->
+                                                    if (plan.isEmpty()) {
+                                                        message = "没有找到适配 " + instance.minecraftVersion + " 的版本"
+                                                    } else {
+                                                        pendingPlan = hit to plan
+                                                    }
                                                 }
-                                            ).onSuccess { count ->
-                                                refreshInstalled()
-                                                message = "已安装 " + count + " 个文件（含依赖）"
-                                            }.onFailure { error ->
-                                                message = "安装失败：" + (error.message ?: "未知错误")
+                                                progress = null
+                                                loading = false
                                             }
-                                            progress = null
-                                            loading = false
                                         }
-                                    }) { Text("安装") }
+                                    ) { Text(if (alreadyIn) "已安装" else "安装") }
                                 }
                             }
                             HorizontalDivider()
