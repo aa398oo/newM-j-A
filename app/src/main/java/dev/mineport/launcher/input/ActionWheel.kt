@@ -1,4 +1,4 @@
-package dev.mineport.launcher.input
+﻿package dev.mineport.launcher.input
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
@@ -79,13 +80,25 @@ fun ActionWheel(
 
         actions.forEachIndexed { index, action ->
             val selected = action == active
+            // 选中的扇区外扩 4%，形成「被按下去又弹起」的层次，而不是只换颜色
+            val r = if (selected) radius * 1.04f else radius
             drawArc(
                 color = if (selected) Color(0xCC22D3A6) else Color(0x22161B22),
                 startAngle = startOffset + index * step,
                 sweepAngle = step - 2f,
                 useCenter = true,
-                topLeft = Offset(center.x - radius, center.y - radius),
-                size = Size(radius * 2f, radius * 2f)
+                topLeft = Offset(center.x - r, center.y - r),
+                size = Size(r * 2f, r * 2f)
+            )
+            // 1.5px 描边：DESIGN-STYLE 六「动作键：描边圆 + 极淡填充」
+            drawArc(
+                color = if (selected) Color(0xFF4ADE80) else Color(0x33FFFFFF),
+                startAngle = startOffset + index * step,
+                sweepAngle = step - 2f,
+                useCenter = false,
+                topLeft = Offset(center.x - r, center.y - r),
+                size = Size(r * 2f, r * 2f),
+                style = Stroke(width = with(density) { 1.5.dp.toPx() })
             )
         }
 

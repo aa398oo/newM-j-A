@@ -41,6 +41,7 @@ import dev.mineport.launcher.jvm.RuntimeStager
 import dev.mineport.launcher.net.LanDiscovery
 import dev.mineport.launcher.ui.motion.EnterFromBottom
 import dev.mineport.launcher.ui.motion.PixelDotsLoading
+import dev.mineport.launcher.ui.theme.mono
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -351,7 +352,7 @@ private fun DiagnosticsCard() {
                 Text("性能采样", style = MaterialTheme.typography.labelMedium)
                 Text(
                     it,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.mono(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

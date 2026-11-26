@@ -10,6 +10,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 
 // 色板来自 docs/DESIGN-STYLE.md 第二节。主色是信号青绿 #22D3A6，
 // 刻意不使用 FCL 的草绿，避免被认成同一个产品。
@@ -53,6 +55,17 @@ private val LightColors = lightColorScheme(
     surfaceVariant = Color(0xFFEDF0F4),
     onSurfaceVariant = Color(0xFF53606C)
 )
+
+/**
+ * 等宽数字样式（DESIGN-STYLE 四：数字与参数用等宽）。
+ *
+ * 用途：帧率、内存、版本号、下载速度、坐标。位数变化时不左右抖，是「科技感」的关键细节。
+ * 用法：`Text(..., style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFontFamily))`
+ */
+val MonoFontFamily: FontFamily = FontFamily.Monospace
+
+/** 便捷写法：在已有样式上叠加等宽字体。 */
+fun TextStyle.mono(): TextStyle = copy(fontFamily = MonoFontFamily)
 
 @Composable
 fun MineportTheme(
