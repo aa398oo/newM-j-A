@@ -36,10 +36,17 @@ object NativeRenderer {
 
     /**
      * 键盘输入（轮盘/虚拟按键）。key 用 GLFW 键码：W=87 A=65 S=83 D=68
-     * Space=32 LeftShift=340 Esc=256；action 0=抬起、1=按下。
+     * Space=32 LeftShift=340 Esc=256；action 用 KEY_RELEASE=0 / KEY_PRESS=1。
      */
     @JvmStatic
     external fun nativeSendKey(key: Int, action: Int)
+
+    /**
+     * nativeSendKey 的 action 契约，与 GLFW 的 GLFW_RELEASE=0 / GLFW_PRESS=1 对齐。
+     * 轮盘按下要传 KEY_PRESS，松手传 KEY_RELEASE——写反会变成「按住不前进、松手卡键」。
+     */
+    const val KEY_RELEASE = 0
+    const val KEY_PRESS = 1
 
     /** 复位输入状态（触摸被取消/系统手势打断时调用，避免按键卡在按下态）。 */
     @JvmStatic

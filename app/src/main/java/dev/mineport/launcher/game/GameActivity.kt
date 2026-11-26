@@ -13,6 +13,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.mineport.launcher.MineportApplication
 import dev.mineport.launcher.data.GameInstance
 import dev.mineport.launcher.input.ActionWheel
@@ -82,11 +85,11 @@ class GameActivity : ComponentActivity() {
         val key = keyOf(action)
         if (down) {
             if (heldWheel.add(action)) {
-                NativeRenderer.nativeSendKey(key, 0)
+                NativeRenderer.nativeSendKey(key, NativeRenderer.KEY_PRESS)
                 Log.i(TAG, "wheel press " + action.name)
             }
         } else if (heldWheel.remove(action)) {
-            NativeRenderer.nativeSendKey(key, 1)
+            NativeRenderer.nativeSendKey(key, NativeRenderer.KEY_RELEASE)
             Log.i(TAG, "wheel release " + action.name)
         }
     }
@@ -137,6 +140,12 @@ class GameActivity : ComponentActivity() {
                 }
             }
         }
+        // ComposeView 挂在 PopupWindow 里，父链顶端是 PopupWindow$PopupViewContainer，
+        // 不在 Activity 的 decorView 树中，findViewTreeLifecycleOwner() 会拿到 null 并抛
+        // IllegalStateException。三个所有者必须手动挂到 Activity 上。
+        wheel.setViewTreeLifecycleOwner(this)
+        wheel.setViewTreeViewModelStoreOwner(this)
+        wheel.setViewTreeSavedStateRegistryOwner(this)
         // B4：轮盘放进**独立 PopupWindow**，而不是 Activity 视图树里的子 View。
         // 子 View 方案下 GameHostLayout 必须在 DOWN 时独占整条手势，第二指按轮盘会被
         // 当成视角 MOVE 吞掉；独立窗口有自己的触摸通道，两者可以同时用。

@@ -33,9 +33,9 @@ class GameSurfaceView(context: Context, private val glVersion: Int = 2) : Surfac
                 // 否则 GLFW 窗口是 0x0，MC 的 RenderTarget 建 0x0 纹理后 FBO 会报
                 // GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT。
                 BridgeWindow.attach(holder.surface)
+                // 尺寸的唯一写入源：nativeResize 内部会调 bridgeOnSurfaceSize 同步输入坐标口径。
+                // 这里绝不能再调 nativeSetScreenSize——那会造成双真源，横竖屏切换后点击错位。
                 NativeRenderer.nativeResize(w, h)
-                // 以 Surface 的真实横向像素为准覆盖 displayMetrics 估值（方向切换时更可靠）。
-                NativeRenderer.nativeSetScreenSize(w, h)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {

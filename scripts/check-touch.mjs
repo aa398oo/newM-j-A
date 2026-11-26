@@ -7,7 +7,7 @@
  *
  * 用法：node scripts/check-touch.mjs
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -30,6 +30,7 @@ const activity = read('app/src/main/java/dev/mineport/launcher/game/GameActivity
 const jni = read('app/src/main/cpp/jni_bridge.cpp');
 const render = read('app/src/main/cpp/render_bridge.cpp');
 const surface = read('app/src/main/java/dev/mineport/launcher/game/GameSurfaceView.kt');
+const renderer = read('app/src/main/java/dev/mineport/launcher/game/NativeRenderer.kt');
 
 // B1：DOWN 必须立即 press，且按下坐标取 DOWN 点。
 must('B1 DOWN 立即 press', host, /ACTION_DOWN[\s\S]{0,900}?inject\(downX, downY, ACTION_PRESS\)/,
@@ -55,8 +56,32 @@ must('B2 bridgeOnSurfaceSize 定义', jni, /extern\s+"C"\s+void\s+bridgeOnSurfac
   'jni_bridge.cpp 导出 bridgeOnSurfaceSize');
 must('B2 nativeResize 调用它', render, /bridgeOnSurfaceSize\(width,\s*height\)/,
   'render_bridge.cpp nativeResize 末尾调用');
-const metricsSets = (codeOnly(activity).match(/nativeSetScreenSize\(/g) ?? []).length;
-add('B2 仅在 onCreate 兜底一次', metricsSets <= 1, 'nativeSetScreenSize 调用次数 = ' + metricsSets);
+// B2 修订：尺寸写入点必须在 game/ 目录里全局唯一（之前只扫 GameActivity，漏掉
+// GameSurfaceView.surfaceChanged 的第二处写入，给了假绿灯）。
+const gameDir = 'app/src/main/java/dev/mineport/launcher/game';
+const gameFiles = readdirSync(join(root, gameDir))
+  .filter((f) => f.endsWith('.kt'))
+  .map((f) => ({ name: f, text: read(gameDir + '/' + f) }));
+// NativeRenderer.kt 里是 external 声明本身，不算调用站点。
+const metricsSites = gameFiles
+  .filter((f) => f.name !== 'NativeRenderer.kt')
+  .filter((f) => /nativeSetScreenSize\s*\(/.test(codeOnly(f.text)))
+  .map((f) => f.name);
+add('B2 nativeSetScreenSize 调用站点仅 GameActivity 一处', metricsSites.length <= 1 && (metricsSites[0] ?? 'GameActivity.kt') === 'GameActivity.kt',
+  '调用站点 = ' + (metricsSites.join(',') || 'none'));
+
+// 键盘口径：按下必须传 KEY_PRESS(1)、松手传 KEY_RELEASE(0)。
+must('KEY_PRESS/KEY_RELEASE 常量已定义', renderer, /const\s+val\s+KEY_PRESS\s*=\s*1[\s\S]*const\s+val\s+KEY_RELEASE\s*=\s*0|const\s+val\s+KEY_RELEASE\s*=\s*0[\s\S]*const\s+val\s+KEY_PRESS\s*=\s*1/,
+  'NativeRenderer 定义常量');
+const wheelPress = (codeOnly(activity).match(/nativeSendKey\([^)]*KEY_PRESS\)/g) ?? []).length;
+const wheelRelease = (codeOnly(activity).match(/nativeSendKey\([^)]*KEY_RELEASE\)/g) ?? []).length;
+add('轮盘按下传 KEY_PRESS、松手传 KEY_RELEASE', wheelPress === 1 && wheelRelease === 1,
+  'KEY_PRESS 站点 ' + wheelPress + ' / KEY_RELEASE 站点 ' + wheelRelease);
+
+// PopupWindow 里的 ComposeView 必须手挂 ViewTree 所有者，否则一点就崩。
+must('PopupWindow 轮盘已挂 LifecycleOwner', activity, /setViewTreeLifecycleOwner\(this\)/, 'wheel 设置了 LifecycleOwner');
+must('PopupWindow 轮盘已挂 ViewModelStoreOwner', activity, /setViewTreeViewModelStoreOwner\(this\)/, 'wheel 设置了 ViewModelStoreOwner');
+must('PopupWindow 轮盘已挂 SavedStateRegistryOwner', activity, /setViewTreeSavedStateRegistryOwner\(this\)/, 'wheel 设置了 SavedStateRegistryOwner');
 
 // 输入通道：critical_* 优先，反射兜底。
 must('critical 通道已解析', jni, /critical_send_cursor_pos/, 'dlsym 了 critical_send_cursor_pos');
