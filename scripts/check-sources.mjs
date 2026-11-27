@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, extname, relative } from "node:path";
 
-const root = process.argv[2] || ".";
+const scriptDir = import.meta.dirname ?? ".";
+const root = process.argv[2] || scriptDir + "/..";
 const exts = new Set([".kt", ".kts", ".cpp", ".h", ".hpp"]);
 const files = [];
 

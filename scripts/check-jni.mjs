@@ -9,7 +9,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const root = process.argv[2] || ".";
+const scriptDir = import.meta.dirname ?? ".";
+const root = process.argv[2] || scriptDir + "/..";
 const ktDir = join(root, "app/src/main/java");
 const cppDir = join(root, "app/src/main/cpp");
 
