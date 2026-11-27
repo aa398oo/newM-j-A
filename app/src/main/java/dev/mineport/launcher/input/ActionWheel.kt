@@ -1,15 +1,9 @@
-﻿package dev.mineport.launcher.input
+package dev.mineport.launcher.input
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -17,59 +11,28 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import kotlin.math.atan2
-import kotlin.math.hypot
 
 /**
- * 动作轮盘：按住任意位置拖动选择方向，松手触发对应 [GameAction]。
+ * 动作轮盘：**纯展示**，不接收触摸。
  *
- * 回调语义是「按住 / 松开」而不是「点一下」：前后左右移动是持续输入，
- * 松手必须 release，否则游戏里会卡键。切换扇区时先松开旧动作再按下新动作。
+ * 命中判定在 [dev.mineport.launcher.game.GameHostLayout] 里按 pointer 手动做，
+ * 这样「一根手指转视角、另一根手指按轮盘」才能同时成立——Compose 的触摸系统
+ * 一次只能把整条手势交给一个 View，做不到按手指分流。
  *
- * 交互口径（DESIGN-STYLE 六）：描边圆 + 极淡填充，选中扇区才亮；背景压暗 40%。
- * 绘制用 Canvas，文字用 nativeCanvas（避免依赖 TextMeasurer 的版本差异）。
+ * 回调语义是「按住 / 松开」而不是「点一下」：前后左右是持续输入，松手必须 release。
  */
 @Composable
 fun ActionWheel(
+    active: GameAction?,
     modifier: Modifier = Modifier,
-    actions: List<GameAction> = GameAction.Defaults,
-    onAction: (GameAction, Boolean) -> Unit
+    actions: List<GameAction> = GameAction.Defaults
 ) {
     if (actions.isEmpty()) return
-    var active by remember { mutableStateOf<GameAction?>(null) }
-    val latestOnAction by rememberUpdatedState(onAction)
     val density = LocalDensity.current
 
-    Canvas(
-        modifier = modifier
-            .fillMaxSize()
-            .pointerInput(actions) {
-                detectDragGestures(
-                    onDragStart = { active = null },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        val center = Offset(size.width / 2f, size.height / 2f)
-                        val next = pick(change.position - center, actions)
-                        if (next != active) {
-                            active?.let { latestOnAction(it, false) }
-                            next?.let { latestOnAction(it, true) }
-                            active = next
-                        }
-                    },
-                    onDragEnd = {
-                        active?.let { latestOnAction(it, false) }
-                        active = null
-                    },
-                    onDragCancel = {
-                        active?.let { latestOnAction(it, false) }
-                        active = null
-                    }
-                )
-            }
-    ) {
+    Canvas(modifier = modifier.fillMaxSize()) {
         val radius = minOf(size.width, size.height) * 0.42f
         val center = Offset(size.width / 2f, size.height / 2f)
         val step = 360f / actions.size
@@ -122,15 +85,4 @@ fun ActionWheel(
             canvas.nativeCanvas.drawText(active?.label ?: "动作", center.x, center.y + paint.textSize / 3f, paint)
         }
     }
-}
-
-private fun pick(delta: Offset, actions: List<GameAction>): GameAction? {
-    val distance = hypot(delta.x, delta.y)
-    if (distance < 24f) return null
-    var angle = Math.toDegrees(atan2(delta.y.toDouble(), delta.x.toDouble())).toFloat()
-    if (angle < 0f) angle += 360f
-    val step = 360f / actions.size
-    val index = (((angle + 90f + step / 2f) % 360f) / step).toInt()
-        .coerceIn(0, actions.size - 1)
-    return actions[index]
 }

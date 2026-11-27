@@ -7,15 +7,14 @@ import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.PopupWindow
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import dev.mineport.launcher.MineportApplication
 import dev.mineport.launcher.data.GameInstance
 import dev.mineport.launcher.input.ActionWheel
@@ -59,7 +58,6 @@ class GameActivity : ComponentActivity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var glView: GameSurfaceView? = null
-    private var wheelPopup: PopupWindow? = null
     private lateinit var instance: GameInstance
     private lateinit var root: GameHostLayout
 
@@ -69,6 +67,9 @@ class GameActivity : ComponentActivity() {
 
     /** 轮盘按下过、还没抬起的动作，避免重复 press/release。 */
     private val heldWheel = HashSet<GameAction>()
+
+    /** 轮盘当前高亮的扇区；触摸命中由 GameHostLayout 按 pointer 手动判定后回调这里。 */
+    private var wheelActive by mutableStateOf<GameAction?>(null)
 
     private fun keyOf(action: GameAction): Int = when (action) {
         GameAction.FORWARD -> 87     // W
@@ -129,38 +130,30 @@ class GameActivity : ComponentActivity() {
             )
         )
 
-        // 左下角动作轮盘：只在自身矩形内接事件（GameHostLayout 按 getGlobalVisibleRect 分流），
-        // 其余整块留给游戏表面；动作走 nativeSendKey → critical_send_key。
+        // 左下角动作轮盘：纯展示层，触摸命中由 host 按 pointer 手动判定（见 GameHostLayout），
+        // 这样「一根手指转视角、另一根手指按轮盘」能同时成立。
         val density = resources.displayMetrics.density
         val wheelSize = (220 * density).toInt()
         val wheel = ComposeView(this).apply {
             setContent {
                 MineportTheme {
-                    ActionWheel(onAction = { action, down -> handleWheel(action, down) })
+                    ActionWheel(active = wheelActive)
                 }
             }
         }
-        // ComposeView 挂在 PopupWindow 里，父链顶端是 PopupWindow$PopupViewContainer，
-        // 不在 Activity 的 decorView 树中，findViewTreeLifecycleOwner() 会拿到 null 并抛
-        // IllegalStateException。三个所有者必须手动挂到 Activity 上。
-        wheel.setViewTreeLifecycleOwner(this)
-        wheel.setViewTreeViewModelStoreOwner(this)
-        wheel.setViewTreeSavedStateRegistryOwner(this)
-        // B4：轮盘放进**独立 PopupWindow**，而不是 Activity 视图树里的子 View。
-        // 子 View 方案下 GameHostLayout 必须在 DOWN 时独占整条手势，第二指按轮盘会被
-        // 当成视角 MOVE 吞掉；独立窗口有自己的触摸通道，两者可以同时用。
-        wheelPopup = PopupWindow(wheel, wheelSize, wheelSize, false).apply {
-            setBackgroundDrawable(null)
-            isClippingEnabled = true
-            isOutsideTouchable = false
+        host.onWheelAction = { action, down ->
+            handleWheel(action, down)
+            wheelActive = if (down) action else null
         }
-        setContentView(host)
-        wheelPopup?.showAtLocation(
-            host,
-            android.view.Gravity.BOTTOM or android.view.Gravity.START,
-            (12 * density).toInt(),
-            (12 * density).toInt()
+        host.addView(
+            wheel,
+            FrameLayout.LayoutParams(wheelSize, wheelSize, android.view.Gravity.BOTTOM or android.view.Gravity.START).apply {
+                leftMargin = (12 * density).toInt()
+                bottomMargin = (12 * density).toInt()
+            }
         )
+        host.wheelView = wheel
+        setContentView(host)
 
         // 先把窗口像素尺寸同步给 GLFW/CallbackBridge：Android 上 Surface 尺寸就是
         // 窗口尺寸，但 libpojavexec 的窗口字段默认是 0，主菜单会因此点不动。
@@ -272,13 +265,10 @@ class GameActivity : ComponentActivity() {
                 // GLFW/CallbackBridge（之前两条路各写一份，横竖屏切换后点击会偏移）。
                 withContext(Dispatchers.IO) {
                     val libDir = applicationInfo.nativeLibraryDir ?: ""
-                    val bootExit = JvmLauncher.runMainClass(
-                        "dev.mineport.probe.Boot",
-                        arrayOf(libDir)
-                    )
-                    if (bootExit != 0) {
-                        status("Boot 失败（" + bootExit + "）：" + JvmLauncher.lastError())
-                    }
+                    // 注意：这里**不能**再调 JvmLauncher.runMainClass 跑任何探针类。
+                    // nativeRunMainClass 只允许消费一次 main（g_mainConsumed 原子门），
+                    // 早先这里跑 dev.mineport.probe.Boot 会把这次机会用光，
+                    // 导致真正的 MC main 直接返回 -4、黑屏。
                     if (JvmLauncher.nativeInitializeHooks(libDir, File(filesDir, "runtime/lib").absolutePath)) {
                         status("FCL hooks 已初始化")
                     } else {
@@ -345,8 +335,6 @@ class GameActivity : ComponentActivity() {
     override fun onDestroy() {
         scope.cancel()
         PerfSampler.stop()
-        runCatching { wheelPopup?.dismiss() }
-        wheelPopup = null
         JvmLauncher.stop()
         glView?.onDestroy()
         super.onDestroy()

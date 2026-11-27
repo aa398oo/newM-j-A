@@ -127,6 +127,8 @@ bool resolveCriticalInput() {
     // 切到「输入进队列、渲染线程 pump」模式：否则 critical_* 会在调用线程直接执行
     // MouseHandler 回调，和渲染线程写同一批字段（参考文献指出的数据竞争）。
     if (g_criticalSetStackqueue != nullptr && !g_stackQueueEnabled) {
+        // A/B 结论：0 = 直接在当前线程调 GLFW 回调，在 MC 里会直接崩/退回首页；
+        // 必须保持 1（入队，由渲染线程每帧 glfwPollEvents 派发）。
         g_criticalSetStackqueue(1);
         g_stackQueueEnabled = true;
         LOGI("critical: stack queue enabled");
@@ -1333,6 +1335,26 @@ Java_dev_mineport_launcher_game_NativeRenderer_nativeSendPointer(
     // 首选：FCL/Pojav 的 critical_send_* 输入队列（渲染线程每帧 pump，线程安全）。
     // 这是 FCL 3.4.1 真正在用的通道，和反射 MouseHandler 相比不会与渲染线程抢字段。
     if (resolveCriticalInput()) {
+        // 诊断：isInputReady 是 critical_* 的第一道门（反汇编 env+0x218，相对 enviro+0x27000），
+        // 为 0 时事件被静默丢弃。只打一次，避免刷屏。
+        static bool loggedReady = false;
+        if (!loggedReady) {
+            loggedReady = true;
+            void* sym = dlsym(RTLD_DEFAULT, "pojav_environ");
+            if (sym == nullptr) {
+                LOGI("critical: pojav_environ symbol missing");
+            } else {
+                void* environ = *static_cast<void**>(sym);
+                if (environ == nullptr) {
+                    LOGI("critical: pojav_environ is null");
+                } else {
+                    const uint8_t ready =
+                        *(reinterpret_cast<uint8_t*>(environ) + 0x27218);
+                    LOGI("critical: isInputReady=%d env=%p",
+                         static_cast<int>(ready), environ);
+                }
+            }
+        }
         // 首次走 critical 通道时补一次窗口尺寸：FCL 的输入层要靠它算命中范围。
         if (!g_screenSizeSent && g_screenWidth > 0 && g_criticalScreenSize != nullptr) {
             g_criticalScreenSize(g_screenWidth, g_screenHeight);

@@ -2,7 +2,7 @@
 # 用法: pwsh -File X:\android\scripts\verify-touch.ps1
 
 param(
-    [string]$Serial = '<DEVICE_SERIAL>',
+    [string]$Serial = '',
     [string]$InstanceId = 'c9d58e86-4a5f-4b89-af43-a055bef2f757',
     [string]$Apk = 'X:\android\app\build\outputs\apk\debug\app-debug.apk',
     [string]$Adb = 'X:\android\.toolchain\sdk\platform-tools\adb.exe',
@@ -18,10 +18,14 @@ $out = 'X:\android\.toolchain'
 if (-not (Test-Path $Adb)) { Write-Host "missing adb: $Adb"; exit 2 }
 
 Write-Host '== device =='
-$devices = & $Adb devices 2>&1
-if (-not ($devices -match [regex]::Escape($Serial))) {
-    Write-Host "device $Serial not online"
-    Write-Host ($devices -join "`n")
+# 不硬编码序列号：取第一个在线设备，多设备时用 -Serial 指定。
+if ([string]::IsNullOrWhiteSpace($Serial)) {
+    $Serial = (& $Adb devices) | Where-Object { $_ -match '^\S+\s+device$' } |
+        ForEach-Object { ($_ -split '\s+')[0] } | Select-Object -First 1
+}
+if ([string]::IsNullOrWhiteSpace($Serial)) {
+    Write-Host 'no online device'
+    Write-Host ((& $Adb devices) -join "`n")
     exit 2
 }
 Write-Host "ok: $Serial"

@@ -483,3 +483,62 @@ if (g_mainConsumed.exchange(true)) {
 
 重建要在同一进程里 `DestroyJavaVM` + 重新 `dlopen` libjvm，Android 上 libjvm 无法安全重载（符号与 TLS 都留在进程里），失败率远高于收益。**拒绝 + 让用户重启进程**是唯一稳的方案，这也和 FCL 的行为一致。
 
+
+---
+
+## 二十三、多点触控（2026-11-27）
+
+### 23.1 旧方案为什么只有一根手指
+
+`GameHostLayout` 在 `ACTION_DOWN` 时定一次 `owner`，整条手势都跟着走：
+手指按下的那一刻落在游戏区，之后所有 `ACTION_POINTER_DOWN`（第二根手指）
+都被判成「游戏区」，永远进不了轮盘。表现就是「一根手指转视角、另一根手指按轮盘」完全无效。
+
+### 23.2 新方案：按 pointerId 记账
+
+```kotlin
+private val owners = SparseIntArray()      // pointerId -> OWNER_GAME / OWNER_WHEEL
+private val wheelIndex = SparseIntArray()  // pointerId -> 当前扇区下标
+```
+
+- `ACTION_DOWN` / `ACTION_POINTER_DOWN`：只判这一根手指（`ev.actionIndex`）落在哪；
+- `ACTION_MOVE`：遍历 `pointerCount`，每根手指各自处理——轮盘手指算扇区，游戏手指发视角；
+- `ACTION_POINTER_UP`：只释放这一根；
+- `ACTION_UP` / `ACTION_CANCEL`：全清。
+
+### 23.3 轮盘改成「宿主命中 + Compose 只画」
+
+Compose 的 `detectDragGestures` 一次只能吃一条手势，做不到按手指分流。
+所以轮盘彻底让出触摸：
+
+- `ActionWheel(active: GameAction?, ...)` 只负责画，不再有 `pointerInput`；
+- 扇区判定搬到 `GameHostLayout.pickWheelIndex(x, y)`，几何与绘制保持一致
+  （中心 = 轮盘 View 中心，半径 = `min(w,h) * 0.42 * 1.18`，8 等分，从 -90° 开始）；
+- 命中后回调 `onWheelAction(action, down)`，`GameActivity` 转成 `nativeSendKey` 的 press/release，
+  同时更新 `wheelActive` 让扇区高亮。
+
+### 23.4 TouchInjector 支持多指针
+
+- 第一个按下的游戏区指针 = 视角指针（`lookId`），MOVE 只跟它；
+- 其余指针各自按下即 press、33ms 自动 release，互不影响（边走边打）；
+- `pointerUp(id)` 只处理对应指针；`cancelAll()` 统一复位。
+
+### 23.5 静态自检
+
+`scripts/check-touch.mjs` 从 19 项扩到 **22 项**，新增：
+
+- `多指归属按 pointerId 记账`
+- `注入器有 pointerDown/Move/Up 三入口`
+- `轮盘命中在宿主里手动算（不依赖 Compose 触摸）`
+- `ActionWheel 不再接收触摸`
+- `不再使用 PopupWindow 装轮盘`
+
+`node scripts/check-touch.mjs` → **22 项全部通过**。
+
+### 23.6 待真机验证
+
+用户需使用手机，本轮未上机。验证要点：
+1. 一根手指按住屏幕拖动 → 视角转动（`touch.log` 里 `a=1` 连续）；
+2. 另一根手指按轮盘「前」→ 角色前进，同时视角仍可拖；
+3. 两指同时按住轮盘不同扇区 → 两个动作同时生效（`W` + `Space`）；
+4. 三指以上不乱跳（多余指针只做点击，不抢视角）。

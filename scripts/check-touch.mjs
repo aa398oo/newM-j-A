@@ -20,6 +20,9 @@ const read = (rel) => {
   }
 };
 
+// 只留代码行（剥掉整行注释），避免把「历史做法」的注释当成实现命中。
+const codeOnly = (src) => (src ?? '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+
 const checks = [];
 const add = (name, ok, detail = '') => checks.push({ name, ok, detail });
 const must = (name, src, pattern, why) =>
@@ -32,21 +35,22 @@ const render = read('app/src/main/cpp/render_bridge.cpp');
 const surface = read('app/src/main/java/dev/mineport/launcher/game/GameSurfaceView.kt');
 const renderer = read('app/src/main/java/dev/mineport/launcher/game/NativeRenderer.kt');
 
-// B1：DOWN 必须立即 press，且按下坐标取 DOWN 点。
-must('B1 DOWN 立即 press', host, /ACTION_DOWN[\s\S]{0,900}?inject\(downX, downY, ACTION_PRESS\)/,
-  'TouchInjector 在 DOWN 分支里调用 inject(downX, downY, ACTION_PRESS)');
+// B1：DOWN 必须立即 press，且按下坐标取 DOWN 点（多点触控改造后入口是 pointerDown）。
+must('B1 DOWN 立即 press', host, /fun pointerDown\([\s\S]{0,900}?inject\(x, y, ACTION_PRESS\)/,
+  'TouchInjector.pointerDown 里调用 inject(x, y, ACTION_PRESS)');
 must('B1 自动 release 33ms', host, /CLICK_RELEASE_MS\s*=\s*33L/, 'CLICK_RELEASE_MS = 33L');
 must('B1 长按 300ms', host, /LONG_PRESS_MS\s*=\s*300L/, 'LONG_PRESS_MS = 300L');
 must('B1 长按取消自动松开', host, /longHeld\s*=\s*true/, 'longPressArm 把 longHeld 置 true');
 must('B1 clickRelease 尊重 longHeld', host, /clickRelease[\s\S]{0,200}?held\s*&&\s*!longHeld/,
   'clickRelease 只在 held 且非长按时 release');
 
-// B3：CANCEL 必须复位 FCL 输入状态。
-must('B3 CANCEL 复位输入态', host, /ACTION_CANCEL[\s\S]{0,400}?nativeResetInputState\(\)/,
-  'CANCEL 分支调用 nativeResetInputState');
+// B3：CANCEL 必须复位 FCL 输入状态（多点触控后收敛到 cancelAll）。
+add('B3 CANCEL 走 cancelAll', /ACTION_CANCEL[\s\S]{0,400}?cancelAll\(\)/.test(codeOnly(host)),
+  'ACTION_CANCEL -> injector.cancelAll()');
+add('B3 cancelAll 复位输入态', /fun cancelAll\(\)[\s\S]{0,900}?nativeResetInputState\(\)/.test(codeOnly(host)),
+  'cancelAll() 内调用 nativeResetInputState()');
 
 // 单一路径：不能有真的监听器/回调实现（注释里提到历史做法不算）。
-const codeOnly = (src) => (src ?? '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 add('无重复触摸路径',
   !/fun onTouchEvent\(/.test(codeOnly(surface)) && !/setOnTouchListener\s*[({]/.test(codeOnly(activity)),
   'GameSurfaceView 无 onTouchEvent 实现，GameActivity 无 setOnTouchListener 调用');
@@ -78,10 +82,20 @@ const wheelRelease = (codeOnly(activity).match(/nativeSendKey\([^)]*KEY_RELEASE\
 add('轮盘按下传 KEY_PRESS、松手传 KEY_RELEASE', wheelPress === 1 && wheelRelease === 1,
   'KEY_PRESS 站点 ' + wheelPress + ' / KEY_RELEASE 站点 ' + wheelRelease);
 
-// PopupWindow 里的 ComposeView 必须手挂 ViewTree 所有者，否则一点就崩。
-must('PopupWindow 轮盘已挂 LifecycleOwner', activity, /setViewTreeLifecycleOwner\(this\)/, 'wheel 设置了 LifecycleOwner');
-must('PopupWindow 轮盘已挂 ViewModelStoreOwner', activity, /setViewTreeViewModelStoreOwner\(this\)/, 'wheel 设置了 ViewModelStoreOwner');
-must('PopupWindow 轮盘已挂 SavedStateRegistryOwner', activity, /setViewTreeSavedStateRegistryOwner\(this\)/, 'wheel 设置了 SavedStateRegistryOwner');
+// 多点触控（十指）：归属必须按 pointerId 记，不能用整条手势的单一 owner。
+add('多指归属按 pointerId 记账', /SparseIntArray/.test(codeOnly(host)) && /owners\.put\(/.test(codeOnly(host)),
+  'GameHostLayout 用 SparseIntArray 记 pointerId -> owner');
+add('注入器有 pointerDown/Move/Up 三入口',
+  /fun pointerDown\(/.test(codeOnly(host)) && /fun pointerMove\(/.test(codeOnly(host))
+  && /fun pointerUp\(/.test(codeOnly(host)),
+  'TouchInjector 暴露 pointerDown/pointerMove/pointerUp');
+add('轮盘命中在宿主里手动算（不依赖 Compose 触摸）',
+  /private fun pickWheelIndex\(/.test(codeOnly(host)) && /private fun inWheelCircle\(/.test(codeOnly(host)),
+  'GameHostLayout 自己算扇区，Compose 只负责画');
+add('ActionWheel 不再接收触摸', !/pointerInput/.test(codeOnly(read('app/src/main/java/dev/mineport/launcher/input/ActionWheel.kt'))),
+  'ActionWheel 已去掉 pointerInput，改为 active 参数驱动');
+add('不再使用 PopupWindow 装轮盘', !/PopupWindow\s*\(/.test(codeOnly(activity)),
+  'GameActivity 不再 new PopupWindow');
 
 // 输入通道：critical_* 优先，反射兜底。
 must('critical 通道已解析', jni, /critical_send_cursor_pos/, 'dlsym 了 critical_send_cursor_pos');
