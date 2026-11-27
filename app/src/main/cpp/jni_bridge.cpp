@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -148,6 +149,42 @@ bool resolveCriticalInput() {
             LOGI("critical: pojavStartPumping() called");
         } else if (g_pojavStartPumping == nullptr) {
             LOGI("critical: pojavStartPumping missing, queue will never drain");
+        }
+    }
+    // 免编译 A/B 开关：/data/data/dev.mineport.launcher/files/enable-selfpump 存在时，
+    // 自建一个 8ms 循环调用 pojavPumpEvents，用来验证「队列没人 pump」这个假设。
+    // 不开这个文件时行为完全不变。
+    static bool selfPumpChecked = false;
+    if (!selfPumpChecked) {
+        selfPumpChecked = true;
+        void* pumpHandle = dlopen("libpojavexec.so", RTLD_NOW | RTLD_NOLOAD);
+        void* pumpSym = pumpHandle != nullptr ? dlsym(pumpHandle, "pojavPumpEvents") : nullptr;
+        if (pumpSym == nullptr) {
+            LOGI("selfpump: pojavPumpEvents not resolved");
+        } else if (access("/data/data/dev.mineport.launcher/files/enable-selfpump", F_OK) != 0) {
+            LOGI("selfpump: disabled (no marker file)");
+        } else {
+            LOGI("selfpump: thread started");
+            auto pumpFn = reinterpret_cast<void (*)(void*)>(pumpSym);
+            std::thread([pumpFn]() {
+                while (true) {
+                    JNIEnv* pumpEnv = nullptr;
+                    bool attachedNow = false;
+                    if (g_vm != nullptr &&
+                        g_vm->GetEnv(reinterpret_cast<void**>(&pumpEnv), JNI_VERSION_1_6) != JNI_OK) {
+                        if (g_vm->AttachCurrentThread(&pumpEnv, nullptr) == JNI_OK) {
+                            attachedNow = true;
+                        }
+                    }
+                    if (pumpEnv != nullptr) {
+                        pumpFn(reinterpret_cast<void*>(pumpEnv));
+                    }
+                    if (attachedNow) {
+                        g_vm->DetachCurrentThread();
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(8));
+                }
+            }).detach();
         }
     }
     return g_criticalCursorPos != nullptr && g_criticalMouseButton != nullptr;
