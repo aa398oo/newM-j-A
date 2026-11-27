@@ -542,3 +542,40 @@ Compose 的 `detectDragGestures` 一次只能吃一条手势，做不到按手�
 2. 另一根手指按轮盘「前」→ 角色前进，同时视角仍可拖；
 3. 两指同时按住轮盘不同扇区 → 两个动作同时生效（`W` + `Space`）；
 4. 三指以上不乱跳（多余指针只做点击，不抢视角）。
+
+### 23.7 一键验证脚本升级（`scripts/verify-touch.ps1`）
+
+脚本从「点三下 + 三档判定」扩成五段流程，**不再需要人工判读**：
+
+| 阶段 | 动作 | 判定依据 |
+|---|---|---|
+| 1 | 连点三处（Continue / 世界内） | `touch.log` 出现 `ptr` 行 |
+| 2 | 横向 swipe 700ms（视角拖动） | `touch.log` 里 `a=1` 的 MOVE 行数 > 0 |
+| 3 | 点轮盘「前」扇区 | logcat 出现 `wheel press` |
+| 4 | 读 `files/perf-game.log` | 有 `"t":` 采样行 |
+| 5 | 截图 | `X:\android\.toolchain\verify-touch.png` |
+
+**轮盘坐标不再写死**：脚本读 `wm density` 与 `wm size`，按 `220dp` 方块 + `12dp` 左下边距
+换算出中心点，再沿正上方取 `0.25 × 轮盘边长` 作为「前」扇区落点。设备换分辨率也不会点空。
+
+判定升级为七档：
+
+```
+FAIL  touch never reached TouchInjector
+FAIL  critical_* not resolved
+HALF  critical ready but isInputReady=0        <- 之前踩过的坑，单独一档
+HALF  only taps, no MOVE (look drag absent)
+HALF  look drag ok, wheel sector not hit
+HALF  touch chain ok, no perf samples
+PASS  taps + drag + wheel + perf all present
+```
+
+脚本注释全部改成 ASCII——Windows PowerShell 5.1 解析含中文注释的 .ps1 会报
+`意外的标记`，这是之前反复踩的坑。
+
+用法（先放开执行策略）：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+pwsh -File X:\android\scripts\verify-touch.ps1
+```
