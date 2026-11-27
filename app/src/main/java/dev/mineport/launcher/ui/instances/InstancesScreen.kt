@@ -63,6 +63,7 @@ import dev.mineport.launcher.install.VersionImporter
 import dev.mineport.launcher.install.ZipVersionImporter
 import dev.mineport.launcher.share.ShareConfig
 import dev.mineport.launcher.share.ShortCode
+import dev.mineport.launcher.render.ShaderInstaller
 import dev.mineport.launcher.ui.mods.ModsDialog
 import dev.mineport.launcher.ui.motion.pressScale
 import kotlinx.coroutines.Dispatchers
@@ -291,7 +292,14 @@ fun InstancesScreen(container: AppContainer) {
     }
 
     modsFor?.let { instance ->
-        ModsDialog(instance = instance, onDismiss = { modsFor = null })
+        ModsDialog(
+            instance = instance,
+            onDismiss = { modsFor = null },
+            onOpenSettings = {
+                modsFor = null
+                editing = instance
+            }
+        )
     }
 }
 
@@ -313,6 +321,8 @@ private fun InstanceSettingsDialog(
     var loaderMessage by remember { mutableStateOf<String?>(null) }
     var memory by remember { mutableFloatStateOf(instance.memoryMB.toFloat()) }
     var wantShaders by remember { mutableStateOf(instance.wantShaders) }
+    var shaderBusy by remember { mutableStateOf(false) }
+    var shaderMsg by remember { mutableStateOf<String?>(null) }
     var useCacio by remember { mutableStateOf(instance.useCacio) }
     var shareCode by remember { mutableStateOf<String?>(null) }
     var copied by remember { mutableStateOf(false) }
@@ -411,9 +421,68 @@ private fun InstanceSettingsDialog(
                 ) {
                     Checkbox(checked = wantShaders, onCheckedChange = { wantShaders = it })
                     Column(Modifier.weight(1f)) {
-                        Text("光影（Zink 试跑）", style = MaterialTheme.typography.bodyMedium)
+                        Text("光影", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "开启后启动走 ShaderPolicy 判定；光影包本身要装 Iris/OptiFine 模组，失败回退 GL4ES。",
+                            "光影要由 Iris（Fabric）接管渲染管线；这个开关只决定后端走 Zink 还是 GL4ES。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (wantShaders) {
+                    val ctx = LocalContext.current
+                    val instanceMods = remember(instance.gameDirName) {
+                        ShaderInstaller.modsDir(ctx.filesDir, instance.gameDirName)
+                    }
+                    val irisThere = remember(instanceMods, shaderBusy, shaderMsg) {
+                        ShaderInstaller.isIrisInstalled(instanceMods)
+                    }
+                    if (loader != Loader.FABRIC) {
+                        Text(
+                            "Iris 只能装在 Fabric 实例上：请先把上面的加载器切到 Fabric 并安装。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Button(
+                                enabled = !shaderBusy,
+                                onClick = {
+                                    shaderBusy = true
+                                    shaderMsg = null
+                                    scope.launch {
+                                        val r = ShaderInstaller.installIris(
+                                            instance.minecraftVersion,
+                                            instanceMods
+                                        ) { label, done, total ->
+                                            shaderMsg = "$done/$total $label"
+                                        }
+                                        shaderMsg = r.fold(
+                                            { "已写入 $it 个文件（Iris + 必需依赖）" },
+                                            { "失败：" + (it.message ?: it.toString()) }
+                                        )
+                                        shaderBusy = false
+                                    }
+                                }
+                            ) { Text(if (irisThere) "重装 Iris" else "安装 Iris 光影加载器") }
+                            if (shaderBusy) {
+                                Text(
+                                    "  下载中…",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        shaderMsg?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            "光影包（*.zip）放：" +
+                                ShaderInstaller.shaderPacksDir(ctx.filesDir, instance.gameDirName).absolutePath,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

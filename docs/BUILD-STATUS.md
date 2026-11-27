@@ -579,3 +579,50 @@ PASS  taps + drag + wheel + perf all present
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 pwsh -File X:\android\scripts\verify-touch.ps1
 ```
+
+---
+
+## 二十五、光影与模组补课（2026-11-27）
+
+用户反馈「模组还没做！还有光影」，核查后确认：**光影是真缺，模组是入口可达性问题**。
+
+### 25.1 先修一个真 bug：asset index 没进 assets/indexes（黑块根因）
+
+`VersionInstaller` 原来只把 asset index 下到 `versions/<id>/asset_index.json`，
+`AssetInstaller` 拿它去下 objects——**但 MC 运行时是按 `--assetsDir` + `--assetIndex`
+去读 `<assetsDir>/indexes/<id>.json` 的**。文件不在那儿，游戏就认为一个资源都没有，
+所有纹理退化成黑块。真机上看到的「深棕地形 + 中央黑方块 + 6X」正是这个。
+
+修复：下完 assets 后把 index 复制到 `File(assetsDir, "indexes").mkdirs()` 下的
+`"$indexId.json"`，失败计入 `failed` 回报。**已装过版本的设备需重装一次版本**才会补上。
+
+### 25.2 光影：Iris 自动安装
+
+之前只有「光影（Zink 试跑）」开关，`ShaderPolicy` 只决定后端走 Zink 还是 GL4ES，
+**没有任何地方装 Iris**——光影包放进去也不会生效。
+
+新增 `app/src/main/java/dev/mineport/launcher/render/ShaderInstaller.kt`：
+
+- `installIris(gameVersion, modsDir, onFile)`：Modrinth 搜 `iris shaders` + 版本 + `fabric`，
+  按 slug `iris` 命中，交给现有 `ModInstaller.install`（required 依赖 BFS + SHA-1 + 逐文件进度）；
+  成功后 `mkdirs()` 出 `shaderpacks/`
+- `modsDir(filesDir, gameDirName)` / `shaderPacksDir(...)` / `isIrisInstalled(modsDir)`
+
+实例设置里勾选「光影」后：
+- 加载器不是 Fabric：红字「Iris 只能装在 Fabric 实例上」
+- 是 Fabric：「安装 Iris 光影加载器」按钮 + 逐文件进度 + `shaderpacks` 绝对路径
+
+### 25.3 模组：原版实例的引导闭环
+
+`ModsDialog` 对 vanilla 实例一直只显示「不能装」的提示，用户点进去就退出来——功能在，但没给出路。
+
+改动：
+- 签名加 `onOpenSettings: (() -> Unit)? = null`
+- 原版分支多一个「去实例设置装加载器」按钮，点了关掉对话框并直接打开实例设置
+  （那里已有 Fabric/Quilt 一键安装）
+
+链路闭环：原版实例 → 装 Fabric → 模组可用 → 光影可装 Iris。
+
+### 25.4 编译
+
+`assembleDebug` BUILD SUCCESSFUL（1m28s / 1m19s 两次），APK 覆盖 `X:\android\dist\app-debug.apk`。

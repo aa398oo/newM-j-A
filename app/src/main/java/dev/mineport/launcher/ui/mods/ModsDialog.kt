@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +48,12 @@ import java.util.Locale
  * 把加载器改掉；加载器的实际安装（Fabric/Forge installer）是下一步。
  */
 @Composable
-fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
+fun ModsDialog(
+    instance: GameInstance,
+    onDismiss: () -> Unit,
+    /** 原版实例点「去装加载器」时回调：关闭本对话框并打开实例设置。 */
+    onOpenSettings: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
@@ -96,6 +102,11 @@ fun ModsDialog(instance: GameInstance, onDismiss: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (onOpenSettings != null) {
+                        Button(onClick = { onDismiss(); onOpenSettings() }) {
+                            Text("去实例设置装加载器")
+                        }
+                    }
                 } else {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

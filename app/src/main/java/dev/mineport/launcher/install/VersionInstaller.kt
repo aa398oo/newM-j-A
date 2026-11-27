@@ -117,6 +117,17 @@ object VersionInstaller {
                 val assetResult = AssetInstaller.install(assetIndexFile, assetsDir, onStage, onFileProgress)
                 assetResult.onSuccess { assetFiles = it }
                 assetResult.exceptionOrNull()?.let { failed += "assets" to (it.message ?: "下载失败") }
+
+                // 关键：MC 运行时按 --assetsDir + --assetIndex 去读 assets/indexes/<id>.json。
+                // 只把 objects 下下来、不写 index，游戏会认为一个资源都没有，
+                // 所有纹理退化成黑块（真机「黑方块 + 6X」就是这个）。
+                val indexId = version.assetIndex?.id?.takeIf { it.isNotBlank() }
+                if (indexId != null) {
+                    runCatching {
+                        val indexesDir = File(assetsDir, "indexes").apply { mkdirs() }
+                        assetIndexFile.copyTo(File(indexesDir, "$indexId.json"), overwrite = true)
+                    }.onFailure { failed += "asset index" to (it.message ?: "写入失败") }
+                }
             }
 
             Result.success(InstallReport(versionDir, tasks.size, failed, assetFiles))
