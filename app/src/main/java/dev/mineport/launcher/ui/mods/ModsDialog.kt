@@ -34,6 +34,7 @@ import dev.mineport.launcher.data.GameInstance
 import dev.mineport.launcher.mod.ModInstaller
 import dev.mineport.launcher.mod.ModrinthClient
 import dev.mineport.launcher.mod.ModrinthHit
+import dev.mineport.launcher.mod.ModUpdates
 import dev.mineport.launcher.mod.ModrinthClient.ResolvedMod
 import dev.mineport.launcher.ui.theme.mono
 import kotlinx.coroutines.launch
@@ -65,6 +66,9 @@ fun ModsDialog(
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableStateOf<String?>(null) }
+    // UX-06：启发式更新检测（猜不准的 slug 一律不误报）
+    var updateMsg by remember { mutableStateOf<String?>(null) }
+    var updateBusy by remember { mutableStateOf(false) }
     // UX-04：先解析依赖、展示清单，确认后才真正下载
     var pendingPlan by remember { mutableStateOf<Pair<ModrinthHit, List<ResolvedMod>>?>(null) }
 
@@ -117,6 +121,19 @@ fun ModsDialog(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        // UX-06：启发式更新检测，猜不准的 slug 不报「可更新」
+                        TextButton(
+                            enabled = !updateBusy && installed.isNotEmpty(),
+                            onClick = {
+                                updateBusy = true
+                                updateMsg = "检查中…"
+                                scope.launch {
+                                    val statuses = ModUpdates.check(modsDir)
+                                    updateMsg = ModUpdates.summarize(statuses)
+                                    updateBusy = false
+                                }
+                            }
+                        ) { Text(if (updateBusy) "检查中…" else "检查更新") }
                         // UX-07：想看/想手动放 jar 时，至少能拿到路径
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -135,6 +152,13 @@ fun ModsDialog(
                                 message = "路径已复制"
                             }) { Text("复制路径") }
                         }
+                    }
+                    if (updateMsg != null) {
+                        Text(
+                            updateMsg!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     installed.take(6).forEach { file ->
                         Row(
