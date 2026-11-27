@@ -626,3 +626,26 @@ pwsh -File X:\android\scripts\verify-touch.ps1
 ### 25.4 编译
 
 `assembleDebug` BUILD SUCCESSFUL（1m28s / 1m19s 两次），APK 覆盖 `X:\android\dist\app-debug.apk`。
+
+## 二十六、输入队列与 pump（2026-11-27）
+
+26.1 反汇编结论
+- `critical_send_cursor_pos`（libpojavexec 0xe064）在 queue 模式下**不直接调回调**：把坐标存到 `env+0x27140`、置 `env+0x27219`，再往队列写 20 字节事件（事件码 1006）。
+- 真正的派发在 `pojavPumpEvents`（0xd1c8）：先看 `env+0x2721b`（pending cursor）→ 读 `env+0x27140` → `frintm` 取整 → `blr [env+0x27240]`；再看 `env+0x2721c`（pending button）；最后按队列头尾 `env+0x120` 逐个消费。
+- `pojavStartPumping`（0xd358）/ `pojavStopPumping`（0xd428）是 pump 循环的启停，无参（反汇编确认未读 x0–x7）。
+- `liblwjgl.so`（2146 导出）里没有任何 glfw 符号；`libpojavexec.so`（189 导出）只有 `nglfwSet*Callback` 一类回调注册，没有 `nglfwInit` / `nglfwPollEvents` / `nglfwCreateWindow`。所以 `glfwPollEvents` 这条链不经过我们打包的库，**pump 必须自己启动**。
+
+26.2 修复
+- `resolveCriticalInput()` 解析 `pojavStartPumping`，在 `critical_set_stackqueue(1)` 之后调用一次（`g_pumpingStarted` 幂等）。
+- 保留诊断：每次 `nativeSendPointer` 打印 `ptr: pend19=%d pend1b=%d stack=%d qidx=%u`。
+
+26.3 判读
+| 日志特征 | 含义 |
+| --- | --- |
+| `critical: pojavStartPumping() called` 且 `pend1b` 在两次点击间 1→0 | pump 正常，触控应已可用 |
+| `critical: pojavStartPumping missing` | 导出名不符，需换符号反查 |
+| `pend19=1` 但 `pend1b` 永不回落 | pump 起了但循环没转，需在渲染线程代跑 `pojavPumpEvents` |
+| 崩溃 / 退回首页 | `pojavStartPumping` 内部前置条件未满足，退到自建 pump 线程方案 |
+
+26.4 A/B 历史
+- `critical_set_stackqueue(0)` 实测会让 GameActivity 直接退回首页（GLFW 回调在 HotSpot 线程执行）→ 必须保持 1。
