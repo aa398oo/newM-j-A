@@ -480,9 +480,61 @@ private fun InstanceSettingsDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        val packsDir = ShaderInstaller.shaderPacksDir(ctx.filesDir, instance.gameDirName)
+                        var packMsg by remember { mutableStateOf<String?>(null) }
+                        val installedPacks = remember(packsDir, packMsg) {
+                            ShaderInstaller.installedPacks(packsDir)
+                        }
+                        Text("推荐光影包", style = MaterialTheme.typography.labelMedium)
+                        ShaderInstaller.recommended.forEach { pack ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(pack.name, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        pack.note,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                TextButton(
+                                    enabled = !shaderBusy,
+                                    onClick = {
+                                        shaderBusy = true
+                                        packMsg = null
+                                        scope.launch {
+                                            val r = ShaderInstaller.installPack(pack.slug, packsDir) { stage ->
+                                                packMsg = stage
+                                            }
+                                            packMsg = r.fold(
+                                                { "已下载 " + it },
+                                                { "失败：" + (it.message ?: it.toString()) }
+                                            )
+                                            shaderBusy = false
+                                        }
+                                    }
+                                ) { Text("下载") }
+                            }
+                        }
+                        packMsg?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (installedPacks.isNotEmpty()) {
+                            Text(
+                                "已装 " + installedPacks.size + " 个：" + installedPacks.joinToString("、"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
-                            "光影包（*.zip）放：" +
-                                ShaderInstaller.shaderPacksDir(ctx.filesDir, instance.gameDirName).absolutePath,
+                            "目录：" + packsDir.absolutePath +
+                                "（也可手动把 .zip 拖进来）",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

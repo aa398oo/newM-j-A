@@ -50,4 +50,50 @@ object ShaderInstaller {
     /** 已经装过 Iris 没有（粗判：mods 里有 iris-*.jar）。 */
     fun isIrisInstalled(modsDir: File): Boolean =
         modsDir.listFiles()?.any { it.isFile && it.name.startsWith("iris-", ignoreCase = true) } == true
+
+    /** 推荐光影包（Modrinth slug）。挑的是「一眼能看出差别、显存占用可接受」的三个。 */
+    data class KnownPack(val name: String, val slug: String, val note: String)
+
+    val recommended = listOf(
+        KnownPack("BSL Shaders", "bsl-shaders", "风格化偏写实，帧率友好"),
+        KnownPack("Complementary Reimagined", "complementary-reimagined", "综合平衡，效果最讨喜"),
+        KnownPack("Sildur's Vibrant", "sildurs-vibrant-shaders", "色彩鲜艳，老牌选项")
+    )
+
+    /**
+     * 下载一个光影包到 `shaderpacks/`。
+     *
+     * 光影包不绑定加载器、也不进 mods 目录——它只是 shaderpacks 里的一个 zip，
+     * 所以这里只取项目的最新版本，不做 gameVersion/loader 过滤。
+     */
+    suspend fun installPack(
+        slug: String,
+        shaderPacksDir: File,
+        onStage: (String) -> Unit = {}
+    ): Result<String> {
+        onStage("查询 " + slug + " …")
+        val versions = ModrinthClient.allVersions(slug)
+        val version = versions.firstOrNull()
+            ?: return Result.failure(IllegalStateException("没有找到 " + slug + " 的可用版本"))
+        val file = version.files.firstOrNull { it.primary } ?: version.files.firstOrNull()
+        if (file == null || file.url.isBlank()) {
+            return Result.failure(IllegalStateException(slug + " 的版本里没有可下载文件"))
+        }
+        shaderPacksDir.mkdirs()
+        onStage("下载 " + file.filename + " …")
+        val outcome = dev.mineport.launcher.download.FileDownloader.download(
+            urls = listOf(file.url),
+            target = File(shaderPacksDir, file.filename),
+            sha1 = file.hashes.sha1.ifBlank { null }
+        )
+        return outcome.fold(
+            { Result.success(file.filename) },
+            { Result.failure(it) }
+        )
+    }
+
+    /** 已装的光影包文件名。 */
+    fun installedPacks(shaderPacksDir: File): List<String> =
+        shaderPacksDir.listFiles()?.filter { it.isFile && it.name.endsWith(".zip", true) }
+            ?.map { it.name }?.sorted().orEmpty()
 }

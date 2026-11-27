@@ -81,6 +81,10 @@ using CriticalResetFn = void (*)(void);
 // 反汇编确认实现是 `useStackQueue = (use & 0xff) != 0`，写全局标志。
 using CriticalSetStackqueueFn = void (*)(int);
 
+// pojavStartPumping：libpojavexec 导出的 pump 启动函数（无参，反汇编确认未读 x0-x7）。
+// 它负责把 critical_* 入队的事件真正派发给 GLFW 回调；不调用则队列永远不被消费。
+using PojavStartPumpingFn = void (*)();
+
 CriticalCursorPosFn g_criticalCursorPos = nullptr;
 CriticalMouseButtonFn g_criticalMouseButton = nullptr;
 CriticalScrollFn g_criticalScroll = nullptr;
@@ -90,6 +94,8 @@ CriticalResetFn g_criticalReset = nullptr;
 CriticalSetStackqueueFn g_criticalSetStackqueue = nullptr;
 bool g_criticalResolved = false;
 bool g_stackQueueEnabled = false;
+PojavStartPumpingFn g_pojavStartPumping = nullptr;
+bool g_pumpingStarted = false;
 
 /**
  * 解析 libpojavexec 导出的 critical_send_* 输入函数。
@@ -116,6 +122,8 @@ bool resolveCriticalInput() {
     g_criticalReset = reinterpret_cast<CriticalResetFn>(dlsym(handle, "critical_reset_input_state"));
     g_criticalSetStackqueue = reinterpret_cast<CriticalSetStackqueueFn>(
             dlsym(handle, "critical_set_stackqueue"));
+    g_pojavStartPumping = reinterpret_cast<PojavStartPumpingFn>(
+            dlsym(handle, "pojavStartPumping"));
     LOGI("critical: cursor=%p button=%p key=%p scroll=%p screen=%p reset=%p stackqueue=%p",
          reinterpret_cast<void*>(g_criticalCursorPos),
          reinterpret_cast<void*>(g_criticalMouseButton),
@@ -132,6 +140,15 @@ bool resolveCriticalInput() {
         g_criticalSetStackqueue(1);
         g_stackQueueEnabled = true;
         LOGI("critical: stack queue enabled");
+        // 关键一步：光入队不够，必须有线程持续调 pojavPumpEvents 才会派发给 MC。
+        // FCL 原设计就是由 pojavStartPumping 起这个循环，这里补上。
+        if (g_pojavStartPumping != nullptr && !g_pumpingStarted) {
+            g_pumpingStarted = true;
+            g_pojavStartPumping();
+            LOGI("critical: pojavStartPumping() called");
+        } else if (g_pojavStartPumping == nullptr) {
+            LOGI("critical: pojavStartPumping missing, queue will never drain");
+        }
     }
     return g_criticalCursorPos != nullptr && g_criticalMouseButton != nullptr;
 }
@@ -1362,6 +1379,27 @@ Java_dev_mineport_launcher_game_NativeRenderer_nativeSendPointer(
             LOGI("critical: screen size -> %dx%d", g_screenWidth, g_screenHeight);
         }
         g_criticalCursorPos(x, y);
+        // 诊断：0x27219 由 critical_send_cursor_pos 置 1（说明本次已入队/已置 pending），
+        // 0x2721b 由 pojavPumpEvents 消费后清 0。两者对比可判断 pump 是否真的在跑。
+        {
+            static void* cachedSym = nullptr;
+            static bool cacheTried = false;
+            if (!cacheTried) {
+                cacheTried = true;
+                cachedSym = dlsym(RTLD_DEFAULT, "pojav_environ");
+            }
+            if (cachedSym != nullptr) {
+                void* environ = *static_cast<void**>(cachedSym);
+                if (environ != nullptr) {
+                    const uint8_t* base = reinterpret_cast<const uint8_t*>(environ);
+                    LOGI("ptr: pend19=%d pend1b=%d stack=%d qidx=%u",
+                         static_cast<int>(base[0x27219]),
+                         static_cast<int>(base[0x2721b]),
+                         static_cast<int>(base[0x2721a]),
+                         *reinterpret_cast<const uint32_t*>(base + 0x27130));
+                }
+            }
+        }
         // action: 0=按下 1=移动 2=抬起；只有按/抬才动按钮位。
         if (action != 1 && g_criticalMouseButton != nullptr) {
             g_criticalMouseButton(0, action == 0 ? 1 : 0, 0);

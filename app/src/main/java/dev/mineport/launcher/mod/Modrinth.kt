@@ -107,6 +107,20 @@ object ModrinthClient {
         }
     }
 
+    /**
+     * 取项目的全部版本（不按游戏版本/加载器过滤）。
+     *
+     * 光影包（shaderpack）不是模组：它不绑定 loader，也不进 mods 目录，
+     * 只是 `shaderpacks/` 里的一个 zip，所以按「最新版本」取即可。
+     */
+    suspend fun allVersions(slugOrId: String): List<ModrinthVersion> = withContext(Dispatchers.IO) {
+        try {
+            json.decodeFromString<List<ModrinthVersion>>(Http.get("$BASE/project/$slugOrId/version"))
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     data class ResolvedMod(val version: ModrinthVersion, val requiredBy: String)
 
     /**
