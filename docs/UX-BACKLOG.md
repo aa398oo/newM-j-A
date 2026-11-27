@@ -209,3 +209,5 @@
 | UX-11 | 等宽数字未落地 | P2 | ✅ 已修 |
 | UX-12 | 游戏内 HUD 未按规范 | P1 | 🟡 轮盘已改，摇杆待真机 |
 | UX-13 | DESIGN-STYLE 编码损坏 | P1 | ✅ 误判（文件是 UTF-8，读取工具按 GBK 解码所致） |
+
+- UX-06 更新检测：逻辑已实现（`mod/ModUpdates.kt`：slugOf / check / isOutdated / summarize，查不到一律不误报），UI 接线待做。
