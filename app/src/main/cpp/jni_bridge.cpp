@@ -29,7 +29,6 @@
 #include <fstream>
 #include <map>
 #include <mutex>
-#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -57,10 +56,12 @@ std::mutex g_mutex;
 //
 // 早先这里是「整个进程只允许一次」，但 Forge 安装要在同一 JVM 里依次跑 6 个
 // processor（installertools / jarsplitter / FART / binarypatcher 的 main），
-// 全局一次性会从第 2 个开始直接失败。改成按类名记：同一个类拒绝第二次，
-// 不同的类放行——装完 Forge 立刻进游戏（BootstrapLauncher）也走这条。
+// 全局一次性会从第 2 个开始直接失败。按类名去重也不行：installertools 的
+// ConsoleTool 要跑 3 次（MCP_DATA / MOJMAPS / MERGE_MAPPING）。所以只限总次数，
+// 够 6 个 processor + 进游戏（BootstrapLauncher）用，又能挡住失控重复调用。
 std::mutex g_launchedMutex;
-std::set<std::string> g_launchedClasses;
+int g_launchedCount = 0;
+constexpr int kMaxMainLaunches = 32;
 void* g_libjvm = nullptr;
 JavaVM* g_vm = nullptr;
 // 加载主类（net.minecraft.client.main.Main）的 ClassLoader。MC 的类都在它下面，
@@ -955,12 +956,18 @@ Java_dev_mineport_launcher_jvm_JvmLauncher_nativeRunMainClass(
     const std::string outPath = outputPath != nullptr ? toStd(callerEnv, outputPath) : "";
     {
         std::lock_guard<std::mutex> lock(g_launchedMutex);
-        if (g_launchedClasses.count(name) != 0) {
-            LOGE("main 已跑过，拒绝重复调用：%s", name.c_str());
-            g_lastError = "该主类的 main 已在本 JVM 里执行过：" + name;
+        // 不能按类名限流：Forge 的 6 个 processor 里有 3 个都是
+        // net.minecraftforge.installertools.ConsoleTool（MCP_DATA / MOJMAPS / MERGE_MAPPING），
+        // 按类名去重会让第 2 个直接失败。改成限制总次数：够跑完 processor 链，
+        // 又能挡住「同一入口被无限重复调用」这种失控。
+        if (g_launchedCount >= kMaxMainLaunches) {
+            LOGE("main 调用次数超过上限（%d），拒绝：%s", kMaxMainLaunches, name.c_str());
+            g_lastError = "本 JVM 里 main 调用次数超过上限，可能是安装流程死循环：";
+            g_lastError += name;
             return -4;
         }
-        g_launchedClasses.insert(name);
+        g_launchedCount += 1;
+        LOGI("runMainClass #%d: %s", g_launchedCount, name.c_str());
     }
     std::vector<std::string> argStrings;
     const jsize count = args != nullptr ? callerEnv->GetArrayLength(args) : 0;
