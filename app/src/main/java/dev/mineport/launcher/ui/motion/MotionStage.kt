@@ -2,6 +2,7 @@ package dev.mineport.launcher.ui.motion
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -61,6 +62,14 @@ class MotionStage(
     val blockMaterial = Animatable(0f)   // 0=命令方块原色 1=材质唤醒
     val flash = Animatable(0f)           // 撞击白闪，0..1
 
+    /**
+     * L1 导航层：rail 被拖动的归一化位移，-1（往上拽）..1（往下拽）。
+     *
+     * 之所以是归一化而不是 px：方块的下坠距离要跟 rail 的「拉伸比例」走，
+     * 不同屏宽/字号下观感一致。拖拽时直接 snapTo，松手后由 [settleRail] 接管。
+     */
+    val railPull = Animatable(0f)
+
     // L3 道具层（T3 起才驱动）
     val propProgress = Animatable(0f)    // 0=未进场 1=撞到方块
     val propRecoil = Animatable(0f)      // 撞后弹开 0→1→0
@@ -78,6 +87,42 @@ class MotionStage(
      */
     fun play(intent: MotionIntent) {
         scope.launch { mutex.mutate { dispatch(intent) } }
+    }
+
+    /**
+     * rail 松手：先按松手速度把位移弹回 0（带惯性），再用 18ms 的短促抖动
+     * 表现「方块落地」。速度单位是「归一化位移/秒」，由调用方从 VelocityTracker
+     * 换算，避免这里依赖 px/秒与屏幕密度。
+     */
+    fun settleRail(velocity: Float) {
+        scope.launch { mutex.mutate { settleRailImpl(velocity) } }
+    }
+
+    private suspend fun settleRailImpl(velocity: Float) {
+        if (reduceMotion) {
+            railPull.snapTo(0f)
+            return
+        }
+        railPull.animateTo(
+            targetValue = 0f,
+            animationSpec = spring(
+                dampingRatio = 0.78f,
+                stiffness = Spring.StiffnessMediumLow,
+                visibilityThreshold = 0.004f
+            ),
+            // 惯性来自松手速度：Animatable 的 initialVelocity 才是 spring 的入口，
+            // 不是 spring() 的参数（后者只描述曲线刚度/阻尼）。
+            initialVelocity = velocity
+        )
+        // 落地抖动：18ms 一次缩小 + 2° 偏转，然后一次过冲回位。
+        coroutineScope {
+            launch { blockScale.animateTo(0.96f, tween(60, easing = Motion.Ease)) }
+            launch { blockRotate.animateTo(2f, tween(60, easing = Motion.Ease)) }
+        }
+        coroutineScope {
+            launch { blockScale.animateTo(1f, spring(dampingRatio = 0.30f, stiffness = 1100f)) }
+            launch { blockRotate.animateTo(0f, spring(dampingRatio = 0.45f, stiffness = 900f)) }
+        }
     }
 
     private suspend fun dispatch(intent: MotionIntent) {

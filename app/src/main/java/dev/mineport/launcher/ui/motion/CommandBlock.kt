@@ -36,6 +36,8 @@ fun CommandBlock(
             scaleY = s
             rotationZ = stage.blockRotate.value
             alpha = (1f - stage.shatter.value).coerceIn(0f, 1f)
+            // rail 被拽动时方块跟着下坠一点（14dp 满量程），表达「方块压在车上」。
+            translationY = stage.railPull.value * 14.dp.toPx()
         }
     ) {
         drawCommandBlock(

@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,7 +46,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,6 +72,7 @@ import dev.mineport.launcher.ui.motion.MotionStage
 import dev.mineport.launcher.ui.personalize.PersonalizeScreen
 import dev.mineport.launcher.ui.settings.SettingsScreen
 import dev.mineport.launcher.ui.theme.MonoFontFamily
+import kotlinx.coroutines.launch
 
 /** 左侧导航五项（UX-14）：启动 / 下载 / 设置 / 个性化 / 更多。 */
 private data class NavTab(val route: String, val label: String, val icon: ImageVector)
@@ -196,6 +201,11 @@ fun RootScreen() {
 @Composable
 private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit, stage: MotionStage) {
     val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    // 拖 48dp 才到满量程：太小会让正常点击被识别成拖拽（rail 每项才 52dp 高）。
+    val density = LocalDensity.current
+    val maxPullPx = with(density) { 48.dp.toPx() }
+    val tracker = remember { VelocityTracker() }
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -205,24 +215,49 @@ private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit, stage: 
             .windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)
             )
+            // UX-22 T2：rail 可被拽一下（橡皮筋），松手按速度弹回，方块跟着坠落。
+            // 用 pointerInput 而不是 scrollable：这里不需要真的滚动内容，只是物理反馈。
+            .pointerInput(maxPullPx) {
+                detectVerticalDragGestures(
+                    onDragStart = { tracker.resetTracking() },
+                    onDragCancel = { stage.settleRail(0f) },
+                    onDragEnd = {
+                        // 速度换算成「归一化位移/秒」，再打个 0.35 折：rail 不是列表，
+                        // 惯性只需要够看出方向，不能把方块甩出屏幕。
+                        val v = tracker.calculateVelocity().y / maxPullPx
+                        stage.settleRail(v * 0.35f)
+                    }
+                ) { change, dragAmount ->
+                    tracker.addPosition(change.uptimeMillis, change.position)
+                    val next = (stage.railPull.value + dragAmount / maxPullPx).coerceIn(-1f, 1f)
+                    scope.launch { stage.railPull.snapTo(next) }
+                }
+            }
             .width(80.dp)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        navTabs.forEach { tab ->
-            // instances 不属于任何 tab，但它由「启动」页进入，高亮留在启动上。
-            val selected = currentRoute == tab.route ||
-                (currentRoute == "instances" && tab.route == "home")
-            RailItem(
-                tab = tab,
-                selected = selected,
-                onClick = {
-                    onNavigate(tab.route)
-                    // 导航不是「换页」而是「方块被撞一下」：T2 起方块会真的被推下去，
-                    // 现在先把事件通路接上，点哪一项都能看到撞击回弹。
-                    stage.play(MotionIntent.TabImpact)
-                }
-            )
+        Column(
+            modifier = Modifier.graphicsLayer {
+                // 8dp 满量程：位移很小，是「拉橡皮筋」而不是「整列滚动」。
+                translationY = stage.railPull.value * 8.dp.toPx()
+            }
+        ) {
+            navTabs.forEach { tab ->
+                // instances 不属于任何 tab，但它由「启动」页进入，高亮留在启动上。
+                val selected = currentRoute == tab.route ||
+                    (currentRoute == "instances" && tab.route == "home")
+                RailItem(
+                    tab = tab,
+                    selected = selected,
+                    onClick = {
+                        onNavigate(tab.route)
+                        // 导航不是「换页」而是「方块被撞一下」：T2 起方块会真的被推下去，
+                        // 现在先把事件通路接上，点哪一项都能看到撞击回弹。
+                        stage.play(MotionIntent.TabImpact)
+                    }
+                )
+            }
         }
         Spacer(Modifier.weight(1f))
         // 方块常驻在 rail 底部：横屏高约 375dp，rail 上方 5 项占 260dp，

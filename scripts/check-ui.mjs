@@ -278,6 +278,15 @@ mustNot('禁止重度模糊', commandBlock, /\.blur\(/, '模糊用径向渐变�
 mustNot('禁止第三方动画库', motionStage, /Lottie|WebView|ExoPlayer/, '只用 Compose 动画 API');
 must('方块挂到外壳', rootScreen, /CommandBlock\([\s\S]{0,160}?stage = stage/, '方块常驻 rail 底部');
 must('导航触发撞击', rootScreen, /stage\.play\(MotionIntent\.TabImpact\)/, '点 rail 任意项都撞一下');
+// ── UX-22 T2：rail 拖拽 / 惯性 / 吸附 ─────────────────────
+must('rail 可拖拽', rootScreen, /pointerInput\(maxPullPx\)[\s\S]{0,200}?detectVerticalDragGestures/, '橡皮筋物理要不依赖列表滚动容器');
+must('拖 48dp 到满量程', rootScreen, /val maxPullPx = with\(density\) \{ 48\.dp\.toPx\(\) \}/, '太小会把点击误判成拖拽');
+must('松手按速度弹回', rootScreen, /tracker\.calculateVelocity\(\)\.y \/ maxPullPx[\s\S]{0,80}?settleRail\(v \* 0\.35f\)/, '惯性方向要跟手指走');
+must('惯性走 initialVelocity', motionStage, /initialVelocity = velocity/, 'spring() 本身没有速度参数，速度要给 animateTo');
+mustNot('不用 animateDecay', motionStage, /animateDecay/, '吸附目标已知，decay 再 animateTo 会速度断点');
+must('松手后落地抖动', motionStage, /railPull\.animateTo\([\s\S]{0,900}?blockScale\.animateTo\(0\.96f/, '先弹回再抖一下，才有「落地」感');
+must('方块跟着下坠', commandBlock, /translationY = stage\.railPull\.value \* 14\.dp\.toPx\(\)/, '方块是导航的载体，要跟着被拽');
+must('rail 橡皮筋位移', rootScreen, /translationY = stage\.railPull\.value \* 8\.dp\.toPx\(\)/, '整列只动 8dp，是拉橡皮筋不是滚动');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
