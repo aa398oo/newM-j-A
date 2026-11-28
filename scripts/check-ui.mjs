@@ -212,6 +212,22 @@ must('设置页标题固定内容滚动', settings,
   /PageHeader\("设置"\)[\s\S]{0,240}?weight\(1f\)[\s\S]{0,200}?verticalScroll/, '标题不跟着内容滚走');
 must('版本页标题行带返回', instances, /leading = if \(onBack == null\)/, 'onBack 为空时不显示返回');
 must('版本页导入按钮进标题行', instances, /actions = \{[\s\S]{0,200}?"导入目录"/, '三个导入入口塞进行内 actions');
+// —— UX-16 首页三栏 ——
+const home = read('app/src/main/java/dev/mineport/launcher/ui/home/HomeScreen.kt');
+must('首页用 PageHeader', home, /PageHeader\([\s\S]{0,80}?title = "启动"/, 'UX-16：标题行与 rail 对齐');
+must('首页左右两栏', home, /HeroCard\([\s\S]{0,400}?Modifier\.weight\(1\.15f\)[\s\S]{0,400}?GalleryPane\([\s\S]{0,400}?weight\(0\.85f\)/,
+  'UX-16：左主角卡 1.15、右版本画廊 0.85');
+must('首页封面 16:7', home, /aspectRatio\(16f \/ 7f\)/, '横屏封面不能太高，否则启动按钮出屏');
+must('首页封面用主色渐变', home, /Brush\.linearGradient\(/, '不依赖网络封面图，先按主题色生成');
+must('首页加载器色块', home, /Loader\.FABRIC -> Color\(0xFFE8C9A0\)[\s\S]{0,400}?Loader\.VANILLA -> Color\(0xFFA0A8B4\)/,
+  '加载器在列表里要一眼能分辨');
+must('首页准备度三 chip', home, /"\+ 装 Fabric"[\s\S]{0,900}?"\+ 加光影"[\s\S]{0,500}?"轮盘 ✓"/,
+  'UX-16：模组/光影/轮盘三连，未就绪时变成行动号召');
+must('首页版本画廊两列', home, /LazyVerticalGrid\([\s\S]{0,160}?GridCells\.Fixed\(2\)/, '右栏是网格');
+must('首页新建版本入口', home, /NewCard\(onClick = onDownload\)/, '最后一格进下载页');
+must('首页扫准备度', home, /fun scanReady\([\s\S]{0,900}?shaderpacks/, '设备信息挪到更多页，首页只留准备度扫描');
+must('首页启动走 GameActivity', home, /GameActivity\.intent\(context, primary\.id\)/, '启动入口只有一个，别绕回旧路径');
+must('RootScreen 传下载入口', rootScreen, /onOpenDownloads = \{ navigateTab\("downloads"\) \}/, '「+ 装 Fabric」要能跳到下载页');
 
 let failed = 0;
 for (const check of checks) {

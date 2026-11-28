@@ -147,7 +147,8 @@ fun RootScreen() {
                 composable("home") {
                     HomeScreen(
                         container = container,
-                        onOpenInstances = { navController.navigate("instances") }
+                        onOpenInstances = { navController.navigate("instances") },
+                        onOpenDownloads = { navigateTab("downloads") }
                     )
                 }
                 // 「版本管理」不再是导航项（UX-14 五项里没有它）：首页的版本画廊
