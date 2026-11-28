@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
@@ -74,7 +75,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InstancesScreen(container: AppContainer) {
+fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
     val instances by container.instanceStore.instances.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -142,6 +143,14 @@ fun InstancesScreen(container: AppContainer) {
         topBar = {
             TopAppBar(
                 title = { Text("版本") },
+                navigationIcon = {
+                    // 从首页/更多页进来的子页面，给一个明确的返回；作为 tab 时（onBack=null）不显示。
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    }
+                },
                 actions = {
                     TextButton(onClick = { importVersionLauncher.launch(null) }) { Text("导入目录") }
                     TextButton(onClick = { importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }) {

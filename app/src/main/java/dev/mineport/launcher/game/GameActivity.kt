@@ -162,10 +162,11 @@ class GameActivity : ComponentActivity() {
 
         // 左下角动作轮盘：纯展示层，触摸命中由 host 按 pointer 手动判定（见 GameHostLayout），
         // 这样「一根手指转视角、另一根手指按轮盘」能同时成立。
-        // 展开画 8 槽轮盘、收起画 48dp 小球——两者共用一个 220dp 外框，外框不随状态移动，
-        // 所以 host 的圆心计算（wheelView 的 left/top/width）在两种状态下都成立。
+        // 展开画 8 槽轮盘、收起画 48dp 小球——两者共用一个外框（默认 220dp，可在个性化页调
+        // 200/220/260），外框不随状态移动，所以 host 的圆心计算（wheelView 的 left/top/width）
+        // 在两种状态下都成立。
         val density = resources.displayMetrics.density
-        val wheelSize = (220 * density).toInt()
+        val wheelSize = (prefs.actionPadSizeDp * density).toInt()
         val wheel = ComposeView(this).apply {
             setContent {
                 MineportTheme {

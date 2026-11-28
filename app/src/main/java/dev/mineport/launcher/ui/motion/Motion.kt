@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -54,6 +55,12 @@ object Motion {
 }
 
 /**
+ * 界面动画总开关（UX-18「动效」组）。关掉后所有入口动画与转场立刻完成：
+ * 省电，也让对动画敏感的用户不被拖慢。由 MainActivity 按 Prefs 提供。
+ */
+val LocalAnimationsEnabled = staticCompositionLocalOf { true }
+
+/**
  * 按下缩放。必须和按钮共享同一个 [MutableInteractionSource]：
  * ```
  * val source = remember { MutableInteractionSource() }
@@ -83,11 +90,16 @@ fun Modifier.pressScale(
  */
 @Composable
 fun EnterFromBottom(index: Int = 0, content: @Composable () -> Unit) {
-    val progress = remember { Animatable(0f) }
+    val enabled = LocalAnimationsEnabled.current
+    val progress = remember { Animatable(if (enabled) 0f else 1f) }
     val offsetPx = with(LocalDensity.current) { 14.dp.toPx() }
-    LaunchedEffect(index) {
-        delay(index.coerceIn(0, Motion.MaxStagger) * Motion.ItemStepMs)
-        progress.animateTo(1f, tween(durationMillis = 260, easing = Motion.Ease))
+    LaunchedEffect(index, enabled) {
+        if (!enabled) {
+            progress.snapTo(1f)
+        } else {
+            delay(index.coerceIn(0, Motion.MaxStagger) * Motion.ItemStepMs)
+            progress.animateTo(1f, tween(durationMillis = 260, easing = Motion.Ease))
+        }
     }
     Box(
         modifier = Modifier.graphicsLayer {

@@ -25,13 +25,16 @@
         android:largeHeap="true"
         android:hardwareAccelerated="true">
 
-        <!-- 主页固定竖屏：GameActivity 是横屏，退出游戏回到这里时不跟着转。 -->
+        <!-- 主页全站横屏（UX-14）：横屏高度只有约 400dp，导航改成左侧 rail。
+             允许左右翻转（sensorLandscape），不锁死一个方向。
+             旋转不重建 Activity：这套界面没有需要重新解析的配置，重建只会把
+             导航状态和滚动位置复位。 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.Mineport"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

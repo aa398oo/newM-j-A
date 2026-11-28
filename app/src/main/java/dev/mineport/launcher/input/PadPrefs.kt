@@ -41,6 +41,28 @@ class PadPrefs(context: Context) {
         get() = prefs.getFloat(KEY_PAD_ALPHA, 1f).coerceIn(MIN_ALPHA, 1f)
         set(value) = prefs.edit().putFloat(KEY_PAD_ALPHA, value.coerceIn(MIN_ALPHA, 1f)).apply()
 
+    /**
+     * 轮盘展开后的直径（dp）。UX-18「游戏内 HUD」组可调（200/220/260）。
+     *
+     * 进游戏时读一次：改变它需要重建轮盘的 ComposeView，所以下一局生效，
+     * 个性化页会明确写「下次进入游戏生效」。
+     */
+    var actionPadSizeDp: Int
+        get() = prefs.getInt(KEY_PAD_SIZE, ACTION_PAD_DEFAULT_DP)
+            .coerceIn(MIN_PAD_SIZE_DP, MAX_PAD_SIZE_DP)
+        set(value) = prefs.edit()
+            .putInt(KEY_PAD_SIZE, value.coerceIn(MIN_PAD_SIZE_DP, MAX_PAD_SIZE_DP))
+            .apply()
+
+    /** 轮盘贴边位置的两个预设（UX-18 HUD 组）：左下 / 右下。 */
+    fun setActionPadCorner(left: Boolean) {
+        actionPadBallX = if (left) 0f else 1f
+        actionPadBallY = 1f
+    }
+
+    /** 当前位置是不是「左下」。归一到 0.25 以内就算，避免拖动留下的 0.0x 差被判定成别的角落。 */
+    fun isActionPadLeft(): Boolean = actionPadBallX < 0.25f
+
     /** 轮盘左上角在可用区域内的归一化横坐标（0=贴左，1=贴右）。 */
     var actionPadBallX: Float
         get() = prefs.getFloat(KEY_BALL_X, 0f).coerceIn(0f, 1f)
@@ -132,10 +154,16 @@ class PadPrefs(context: Context) {
         const val MIN_PAD_DP = 96
         const val MAX_PAD_DP = 220
 
+        /** 轮盘直径默认 220dp，上下限按 UX-18 的 200/220/260 三档留出余量。 */
+        const val ACTION_PAD_DEFAULT_DP = 220
+        const val MIN_PAD_SIZE_DP = 180
+        const val MAX_PAD_SIZE_DP = 320
+
         private const val KEY_MOVE_ALPHA = "movePadAlpha"
         private const val KEY_MOVE_SIZE = "movePadSize"
         private const val KEY_PAD_EXPANDED = "actionPadExpanded"
         private const val KEY_PAD_ALPHA = "actionPadAlpha"
+        private const val KEY_PAD_SIZE = "actionPadSize"
         private const val KEY_BALL_X = "actionPadBallX"
         private const val KEY_BALL_Y = "actionPadBallY"
         private const val KEY_AUTO_COLLAPSE = "actionPadAutoCollapse"

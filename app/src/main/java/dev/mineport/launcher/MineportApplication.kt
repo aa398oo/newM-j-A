@@ -6,6 +6,7 @@ import dev.mineport.launcher.data.AccountStore
 import dev.mineport.launcher.data.InstanceStore
 import dev.mineport.launcher.device.DeviceProfile
 import dev.mineport.launcher.share.ShareStore
+import dev.mineport.launcher.ui.prefs.Prefs
 
 /**
  * 进程级单例容器。这里只放「构造一次、全局共享」的东西；
@@ -39,4 +40,11 @@ class AppContainer(app: Application) {
 
     /** 设备画像只检测一次：SoC / 内存 / GLES / Vulkan / ABI 在本进程内不会变。 */
     val deviceProfile: DeviceProfile by lazy { DeviceProfile.detect(app) }
+
+    /**
+     * 界面偏好：主题 / 主色调 / 动效开关（UX-18）。
+     * 放进程级单例是因为主题要在 setContent 之前就读到，且 MainActivity 与
+     * 个性化页必须读写同一个实例，改完立刻全局重组。
+     */
+    val uiPrefs: Prefs = Prefs(app)
 }
