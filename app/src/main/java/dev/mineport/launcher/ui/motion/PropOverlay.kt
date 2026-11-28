@@ -12,11 +12,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.tan
 
 /**
  * UX-22 T3：道具层。全屏透明 overlay，只在 [MotionStage.prop] 不为 None 时画东西。
@@ -72,6 +74,12 @@ fun PropOverlay(
         val sh = stage.shatter.value
         if (sh > 0.001f) {
             drawShards(t = sh, center = blockCenter, accent = accent)
+        }
+
+        // T6 丝带：只在唤醒过程中存在，phase 归零即消失。
+        val ribbon = stage.ribbonPhase.value
+        if (ribbon > 0.001f) {
+            drawRibbons(phase = ribbon, center = blockCenter, accent = accent)
         }
     }
 }
@@ -251,6 +259,55 @@ private fun DrawScope.drawShards(t: Float, center: Offset, accent: Color) {
                 topLeft = Offset(x - size / 2f, y - size / 2f),
                 size = Size(size, size)
             )
+        }
+    }
+}
+/**
+ * T6 Fabric 丝带：三条彩带绕方块转一圈。
+ *
+ * 每条用 8 段三次贝塞尔近似椭圆（标准圆弧公式 `k = 4/3 * tan(θ/4)`，椭圆按 y 轴压缩），
+ * 比 28 段直线更省顶点、也更贴「丝带」的顺滑感。
+ * 「背面」段落（sin(a) < 0 的部分）用低 alpha 先画，「正面」用高 alpha 后画，
+ * 不需要真的把方块夹在中间也能造出缠绕的错觉。
+ */
+private fun DrawScope.drawRibbons(phase: Float, center: Offset, accent: Color) {
+    val specs = listOf(
+        Triple(26.dp.toPx(), accent, 0f),
+        Triple(30.dp.toPx(), Color(0xFF22D3A6), 120f),
+        Triple(34.dp.toPx(), Color(0xFFE8C9A0), 240f)
+    )
+    val tilt = 0.34f
+    val seg = 8
+    val stroke = 4.dp.toPx()
+
+    for ((index, spec) in specs.withIndex()) {
+        val (radius, color, offset) = spec
+        val start = Math.toRadians((phase + offset).toDouble())
+        for (s in 0 until seg) {
+            val a1 = start + 2 * PI * s / seg
+            val a2 = start + 2 * PI * (s + 1) / seg
+            val k = (4.0 / 3.0 * tan((a2 - a1) / 4.0)).toFloat()
+
+            val p1 = Offset(center.x + cos(a1).toFloat() * radius, center.y + sin(a1).toFloat() * radius * tilt)
+            val p2 = Offset(center.x + cos(a2).toFloat() * radius, center.y + sin(a2).toFloat() * radius * tilt)
+            val t1 = Offset(-sin(a1).toFloat() * radius, cos(a1).toFloat() * radius * tilt)
+            val t2 = Offset(-sin(a2).toFloat() * radius, cos(a2).toFloat() * radius * tilt)
+
+            val path = Path().apply {
+                moveTo(p1.x, p1.y)
+                cubicTo(
+                    p1.x + t1.x * k, p1.y + t1.y * k,
+                    p2.x - t2.x * k, p2.y - t2.y * k,
+                    p2.x, p2.y
+                )
+            }
+            // 背面（椭圆上半，sin > 0 在屏幕坐标里是下方）压暗，形成前后关系。
+            val back = sin((a1 + a2) / 2) < 0.0
+            val alpha = if (back) 0.38f else 0.92f
+            drawPath(path, color.copy(alpha = alpha), style = Stroke(stroke, cap = StrokeCap.Round))
+            if (index == 0 && !back) {
+                drawPath(path, Color.White.copy(alpha = 0.22f), style = Stroke(stroke * 0.45f, cap = StrokeCap.Round))
+            }
         }
     }
 }

@@ -244,6 +244,7 @@ const themePack = read('app/src/main/java/dev/mineport/launcher/ui/theme/ThemePa
 const motionStage = read('app/src/main/java/dev/mineport/launcher/ui/motion/MotionStage.kt');
 const commandBlock = read('app/src/main/java/dev/mineport/launcher/ui/motion/CommandBlock.kt');
 const propOverlay = read('app/src/main/java/dev/mineport/launcher/ui/motion/PropOverlay.kt');
+const versionInstallScreen = read('app/src/main/java/dev/mineport/launcher/ui/downloads/VersionInstallScreen.kt');
 must('主题包模型', themePack, /@Serializable[\s\S]{0,80}?data class ThemePack\(/, 'UX-19：主题包是一个可序列化的清单');
 must('主题包扩展名', themePack, /const val EXTENSION = "\.mptheme"/, '对外约定 .mptheme');
 must('主题包是 zip', themePack, /ZipOutputStream\([\s\S]{0,4000}?ZipInputStream\(/, '以后要塞预览图/字体，json 直接当文件不够');
@@ -318,6 +319,15 @@ must('粒子抛物线', propOverlay, /0\.5f \* gravity \* local \* local/, '匀�
 must('粒子错峰起步', propOverlay, /\(t - 0\.02f \* i\)\.coerceIn\(0f, 1f\)/, '同时起步像爆炸贴图');
 must('碎裂有重力常数', propOverlay, /val gravity = 900f/, '像素/秒²，和 MotionMode 无关');
 mustNot('碎裂不用粒子库', propOverlay, /ParticleSystem|confetti|lottie/i, '红线：全 Canvas 几何');
+// ── UX-22 T6：Fabric 丝带缠绕唤醒材质 ────────────────────
+must('丝带用 8 段贝塞尔近似椭圆', propOverlay, /val k = \(4\.0 \/ 3\.0 \* tan\(\(a2 - a1\) \/ 4\.0\)\)\.toFloat\(\)/, '标准圆弧公式，比直线段顺滑');
+must('丝带分正反面', propOverlay, /val alpha = if \(back\) 0\.38f else 0\.92f/, '低 alpha 的背面段造缠绕错觉');
+must('三条丝带错开 120 度', propOverlay, /0f\),\s*\r?\n\s*Triple\(30\.dp\.toPx\(\), Color\(0xFF22D3A6\), 120f\),\s*\r?\n\s*Triple\(34\.dp\.toPx\(\), Color\(0xFFE8C9A0\), 240f\)/, '三条才能包住方块');
+must('丝带与材质同帧推进', motionStage, /launch \{ ribbonPhase\.animateTo\(360f, tween\(Motion\.LargeMs, easing = LinearEasing\)\) \}/, '转一圈的时间轴必须固定');
+must('唤醒后材质保留', motionStage, /blockMaterial\.animateTo\(1f, tween\(Motion\.LargeMs, easing = Motion\.Ease\)\)/, '丝带消失但方块已亮，表示装上了');
+must('动画宿主下发给子树', motionStage, /val LocalMotionStage = staticCompositionLocalOf<MotionStage\?> \{ null \}/, '深页不用层层传参');
+must('选出 Fabric 就唤醒', versionInstallScreen, /motion\?\.play\(MotionIntent\.Awaken\)/, '选 loader = 方块被装上加载器');
+mustNot('丝带不用渐变位图', propOverlay, /Bitmap|ImageBitmap/, '全 Canvas 矢量');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

@@ -11,6 +11,7 @@ import androidx.compose.foundation.MutatorMutex
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -62,6 +63,13 @@ enum class MotionStageState { Idle, Impacted, Shattering }
  * @param reduceMotion 来自 `LocalAnimationsEnabled`；true 时所有事件直接落
  *   终态（`snapTo`），不播动画，也不做第二套逻辑。
  */
+/**
+ * 把 rail 旁的动画宿主暴露给整棵子树的 CompositionLocal。
+ *
+ * 只有 `VersionInstallScreen` 这种「深处才知道发生了大事」的地方需要它
+ * （选出 Fabric 版本 → 方块被丝带唤醒），一路传参数会把每个中间层都污染。
+ */
+val LocalMotionStage = staticCompositionLocalOf<MotionStage?> { null }
 class MotionStage(
     private val scope: CoroutineScope,
     private val reduceMotion: Boolean = false
@@ -253,12 +261,24 @@ class MotionStage(
         stage = MotionStageState.Idle
     }
 
+    /**
+     * T6 丝带唤醒：三条彩带绕方块转一圈，材质跟着从丝带扫过的地方亮起来。
+     *
+     * 丝带和材质共用 340ms 线性时间轴——丝带转到哪，方块就亮到哪；
+     * 结束时 `ribbonPhase` 归零，丝带消失但材质留在 1，表示「方块已被唤醒」。
+     */
     private suspend fun awaken() {
         if (reduceMotion) {
             blockMaterial.snapTo(1f)
+            ribbonPhase.snapTo(0f)
             return
         }
-        blockMaterial.animateTo(1f, tween(Motion.MediumMs, easing = Motion.Ease))
+        ribbonPhase.snapTo(0f)
+        coroutineScope {
+            launch { ribbonPhase.animateTo(360f, tween(Motion.LargeMs, easing = LinearEasing)) }
+            launch { blockMaterial.animateTo(1f, tween(Motion.LargeMs, easing = Motion.Ease)) }
+        }
+        ribbonPhase.snapTo(0f)
     }
 
     /**

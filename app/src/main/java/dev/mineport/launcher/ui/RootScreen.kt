@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +72,7 @@ import dev.mineport.launcher.ui.motion.CommandBlock
 import dev.mineport.launcher.ui.motion.LocalAnimationsEnabled
 import dev.mineport.launcher.ui.motion.Motion
 import dev.mineport.launcher.ui.motion.MotionIntent
+import dev.mineport.launcher.ui.motion.LocalMotionStage
 import dev.mineport.launcher.ui.motion.MotionStage
 import dev.mineport.launcher.ui.motion.PropOverlay
 import dev.mineport.launcher.ui.personalize.PersonalizeScreen
@@ -132,6 +134,7 @@ fun RootScreen() {
     var blockCenter by remember { mutableStateOf(Offset.Zero) }
 
     Box(Modifier.fillMaxSize()) {
+    CompositionLocalProvider(LocalMotionStage provides stage) {
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         NavRail(
             currentRoute = currentRoute,
@@ -211,6 +214,7 @@ fun RootScreen() {
                 }
             }
         }
+    }
     }
         // 道具层盖在整个外壳之上（含 rail），但不拦触摸。
         PropOverlay(

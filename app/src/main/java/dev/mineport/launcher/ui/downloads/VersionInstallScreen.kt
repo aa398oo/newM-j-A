@@ -52,6 +52,8 @@ import dev.mineport.launcher.download.VersionEntry
 import dev.mineport.launcher.install.FabricLoaderInstaller
 import dev.mineport.launcher.install.VersionInstaller
 import dev.mineport.launcher.ui.components.EmptyState
+import dev.mineport.launcher.ui.motion.LocalMotionStage
+import dev.mineport.launcher.ui.motion.MotionIntent
 import dev.mineport.launcher.ui.motion.PixelDotsLoading
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -83,6 +85,7 @@ fun VersionInstallScreen(
     var stage by remember { mutableStateOf<String?>(null) }
     var fileProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    val motion = LocalMotionStage.current
 
     val busy = stage != null
     val javaTarget = javaMajorFor(version.id)
@@ -235,6 +238,9 @@ fun VersionInstallScreen(
                 loader = Loader.FABRIC
                 loaderId = picked
                 pickingLoader = false
+                // 选出 Fabric 版本 = 这个方块被装上了加载器：让 rail 旁的命令方块
+                // 被三条丝带绕一圈唤醒（UX-22 T6）。宿主在 RootScreen，靠 CompositionLocal 拿。
+                motion?.play(MotionIntent.Awaken)
             }
         )
     }
