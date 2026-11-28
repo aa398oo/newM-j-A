@@ -70,6 +70,8 @@ object MinecraftLauncher {
             val libraries = chain.reversed().flatMap { it.libraries }.distinctBy { it.name }
 
             val classPath = mutableListOf<File>()
+            // 缺库不能静默跳过：classpath 少一个 jar，进游戏就是 NoClassDefFoundError 黑屏。
+            val missing = mutableListOf<String>()
             // 版本 jar：优先自身目录，其次沿链找（Fabric 版本目录里没有原版 jar），
             // 最后用合并 profile 的 jar 字段指回原版版本 id。
             val jarIds = (listOf(versionId) + chain.map { it.id } + chain.mapNotNull { it.jar }).distinct()
@@ -82,7 +84,7 @@ object MinecraftLauncher {
                 val artifact = library.downloads.artifact ?: continue
                 val path = artifact.path.takeIf { it.isNotBlank() } ?: mavenPath(library.name) ?: continue
                 val libJar = File(librariesDir, path)
-                if (libJar.isFile) classPath += libJar
+                if (libJar.isFile) classPath += libJar else missing += path
             }
 
             // Android/arm64 上不能解压 version JSON 里的 natives-linux：
@@ -91,6 +93,17 @@ object MinecraftLauncher {
             // nativeLibraryDir 放进 java.library.path 的首位，所以这里不再解压。
             @Suppress("UNUSED_PARAMETER")
             val ignoredNativesDir = nativesDir
+
+            // Forge 的主类是一串启动器，classpath 不完整会直接抛错；原版缺库可能是
+            // Android 上用不上的平台库，交给运行时自己决定，这里只对 Forge 硬拦。
+            if (missing.isNotEmpty() && mainClass.contains("bootstraplauncher", ignoreCase = true)) {
+                return@withContext Result.failure(
+                    IllegalStateException(
+                        "Forge 启动缺少 " + missing.size + " 个库（安装可能没跑完，重装一次试试）：" +
+                            missing.take(3).joinToString("，")
+                    )
+                )
+            }
 
             val args = buildArgs(chain, versionId, playerName, gameDir, assetsDir, account)
             val jvmArgs = buildJvmArgs(chain, versionId, librariesDir)

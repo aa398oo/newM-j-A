@@ -503,6 +503,14 @@ must('完整判据含 client jar 与 assets index',
   versionInstall,
   /if \(!File\(dir, "\$versionId\.jar"\)\.isFile\) return false[\s\S]{0,400}?assets\/indexes\/\$indexId\.json/,
   '缺 jar 或缺 indexes 进游戏就是黑方块或直接崩');
+must('缺库不再静默跳过',
+  mcLauncher,
+  /val missing = mutableListOf<String>\(\)[\s\S]{0,1200}?else missing \+= path/,
+  'classpath 少一个 jar 就是 NoClassDefFoundError 黑屏，没有任何提示');
+must('Forge 启动前拦缺库',
+  mcLauncher,
+  /missing\.isNotEmpty\(\) && mainClass\.contains\("bootstraplauncher"[\s\S]{0,400}?Result\.failure/,
+  'Forge 主类链要求 classpath 完整，缺库必须说清楚而不是黑屏');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
