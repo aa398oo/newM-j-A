@@ -1,4 +1,4 @@
-﻿package dev.mineport.launcher.ui.downloads
+package dev.mineport.launcher.ui.downloads
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,18 +9,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.mineport.launcher.download.VersionEntry
 import dev.mineport.launcher.download.VersionManifest
@@ -40,7 +42,6 @@ import dev.mineport.launcher.install.VersionInstaller
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import dev.mineport.launcher.ui.components.EmptyState
-import dev.mineport.launcher.ui.motion.EnterFromBottom
 import dev.mineport.launcher.ui.motion.PixelDotsLoading
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -108,7 +109,9 @@ fun DownloadsScreen() {
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("下载") }) }) { padding ->
+    // 横屏可用高度只有约 375dp，TopAppBar 的 64dp + 大块统计卡太贵；
+    // 标题、统计、刷新压成一行，把高度让给版本列表。
+    Scaffold { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             when (val snapshot = state) {
                 is ManifestUiState.Loading -> LoadingBlock()
@@ -260,41 +263,45 @@ private fun ReadyBlock(
         else manifest.versions.filter { it.id.contains(q, ignoreCase = true) }
     }
     Column(modifier = Modifier.fillMaxSize()) {
-        EnterFromBottom(0) {
-            Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("最新正式版 " + manifest.latest.release, style = MaterialTheme.typography.titleMedium)
-                        TextButton(onClick = onReload) { Text("刷新") }
-                    }
-                    Text(
-                        "共 " + manifest.versions.size + " 个版本 · " +
-                            (if (state.fromCache) "离线缓存" else "在线"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+        // 标题 / 统计 / 刷新一行，横屏下高度比卡片珍贵。
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 8.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "下载",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                "最新 " + manifest.latest.release + " · " + manifest.versions.size +
+                    " 个版本 · " + (if (state.fromCache) "离线缓存" else "在线"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onReload) { Text("刷新") }
         }
 
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            label = { Text("搜版本号，如 1.20.1") },
-            singleLine = true
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            placeholder = { Text("搜版本号，如 1.20.1") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            shape = MaterialTheme.shapes.medium
         )
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)
         ) {
             if (shown.isEmpty()) {
                 item {
@@ -311,18 +318,27 @@ private fun ReadyBlock(
                     onClick = { onSelect(version) }
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(version.id, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                typeLabel(version.type) + " · " + version.releaseTime.take(10),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text("›", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            version.id,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            typeLabel(version.type) + " · " + version.releaseTime.take(10),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "›",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

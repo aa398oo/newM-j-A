@@ -40,6 +40,7 @@ const motion = read('app/src/main/java/dev/mineport/launcher/ui/motion/Motion.kt
 const main = read('app/src/main/java/dev/mineport/launcher/MainActivity.kt');
 const app = read('app/src/main/java/dev/mineport/launcher/MineportApplication.kt');
 const instances = read('app/src/main/java/dev/mineport/launcher/ui/instances/InstancesScreen.kt');
+const downloads = read('app/src/main/java/dev/mineport/launcher/ui/downloads/DownloadsScreen.kt');
 const padPrefs = read('app/src/main/java/dev/mineport/launcher/input/PadPrefs.kt');
 const gameActivity = read('app/src/main/java/dev/mineport/launcher/game/GameActivity.kt');
 
@@ -106,6 +107,16 @@ must('UX-18 HUD 轮盘尺寸', padPrefs, /var actionPadSizeDp: Int/, 'PadPrefs �
 must('UX-18 HUD 位置预设', padPrefs, /fun setActionPadCorner\(left: Boolean\)/, '左下/右下预设');
 must('UX-18 HUD 尺寸进游戏', gameActivity, /prefs\.actionPadSizeDp \* density/,
   'GameActivity 的轮盘外框用 prefs.actionPadSizeDp');
+
+// —— 下载页横屏排版 ——
+mustNot('下载页不用 TopAppBar', downloads, /TopAppBar\(/,
+  '横屏可用高约 375dp，64dp 的 TopAppBar 比内容还贵，应改成一行紧凑标题');
+must('下载页头部压成一行', downloads, /headlineSmall[\s\S]{0,600}?TextButton\(onClick = onReload\)/,
+  '标题 / 版本统计 / 刷新要并排在同一行');
+must('下载页列表占满剩余高度', downloads, /LazyColumn\([\s\S]{0,160}?Modifier\.weight\(1f\)/,
+  'LazyColumn 必须 weight(1f)；fillMaxSize 会把上面的头部挤出可视区');
+must('下载页搜索框不用浮动 label', downloads, /placeholder = \{ Text\("搜版本号/,
+  'label 会额外占 16dp 并让输入框长到 72dp，改用 placeholder');
 
 // —— 更多页 ——
 must('更多页版本管理', more, /"版本管理"/, '更多页要有版本管理入口');
