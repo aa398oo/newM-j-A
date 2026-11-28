@@ -55,6 +55,19 @@ class GameHostLayout @JvmOverloads constructor(
                 val id = ev.getPointerId(i)
                 val x = ev.getX(i)
                 val y = ev.getY(i)
+                // 收起态：先判定是否点在小球（48dp 半径内）——点球展开，这一指不参与游戏。
+                val pad = actionPad
+                if (pad != null && !pad.expanded) {
+                    val w = wheelView
+                    if (w != null && w.width > 0) {
+                        val cx = w.left + w.width / 2f
+                        val cy = w.top + w.height / 2f
+                        val ball = 24f * resources.displayMetrics.density
+                        if (hypot(x - cx, y - cy) <= ball) {
+                            pad.expand()
+                        }
+                    }
+                }
                 val idx = pickWheelIndex(x, y, id)
                 if (idx >= 0 || inWheelCircle(x, y)) {
                     owners.put(id, OWNER_WHEEL)
