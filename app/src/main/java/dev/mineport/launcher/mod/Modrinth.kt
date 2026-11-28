@@ -118,7 +118,8 @@ object ModrinthClient {
         type: ProjectType,
         gameVersion: String?,
         loader: String?,
-        limit: Int = 20
+        limit: Int = 20,
+        offset: Int = 0
     ): Result<List<ModrinthHit>> = withContext(Dispatchers.IO) {
         try {
             val groups = ArrayList<List<String>>(4)
@@ -133,8 +134,9 @@ object ModrinthClient {
             val facets = groups.joinToString(",", "[", "]") { group ->
                 group.joinToString(",", "[", "]") { "\"$it\"" }
             }
+            // offset 用于「加载更多」：Modrinth 的 search 支持 0..1000 的偏移。
             val url = "$BASE/search?query=" + URLEncoder.encode(query, "UTF-8") +
-                "&limit=$limit&facets=" + URLEncoder.encode(facets, "UTF-8")
+                "&limit=$limit&offset=$offset&facets=" + URLEncoder.encode(facets, "UTF-8")
             val body = Http.get(url)
             Result.success(json.decodeFromString<ModrinthSearch>(body).hits)
         } catch (e: Exception) {

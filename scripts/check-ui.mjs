@@ -229,6 +229,16 @@ must('首页扫准备度', home, /fun scanReady\([\s\S]{0,900}?shaderpacks/, '�
 must('首页启动走 GameActivity', home, /GameActivity\.intent\(context, primary\.id\)/, '启动入口只有一个，别绕回旧路径');
 must('RootScreen 传下载入口', rootScreen, /onOpenDownloads = \{ navigateTab\("downloads"\) \}/, '「+ 装 Fabric」要能跳到下载页');
 
+// —— UX-17 下载页分类完善：内容搜索分页 ——
+must('搜索支持 offset', modrinth, /offset: Int = 0/, 'UX-17：加载更多靠 offset，不能只吃第一页');
+must('URL 拼 offset', modrinth, /&limit=\$limit&offset=\$offset/, 'Modrinth search 的 offset 从 0 起');
+must('每页 20 条', contentTab, /private const val PAGE_SIZE = 20/, '与 Modrinth 默认 limit 对齐');
+must('加载更多按钮', contentTab, /Text\("加载更多（已有 "/, '滑到底再决定要不要下一页，省流量');
+must('追加按 project_id 去重', contentTab, /val known = hits\.mapTo\(HashSet\(\)\) \{ it\.project_id \}[\s\S]{0,200}?known\.add\(it\.project_id\)/,
+  '服务端排序会抖，同一项目可能跨页重复');
+must('到底有提示', contentTab, /"共 " \+ hits\.size \+ " 条，到底了"/, '没有更多时要明确收尾，不能一直转圈');
+must('换关键词重置列表', contentTab, /hits = emptyList\(\)[\s\S]{0,400}?searchProjects\(/, '新搜索必须清空旧页，否则 offset 会错位');
+
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

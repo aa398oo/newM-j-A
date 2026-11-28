@@ -52,6 +52,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
+/** 每页条数：与 Modrinth 默认 limit 一致，太大会拖慢首屏。 */
+private const val PAGE_SIZE = 20
+
 /**
  * 下载页的「附属内容」分栏：模组 / 光影 / 材质 / 地图。
  *
@@ -99,6 +102,8 @@ fun ContentTab(
     var query by remember { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<ModrinthHit>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     // 装完只刷新「已装」标记，不重搜列表（重搜会闪一次 loading，还把滚动位置顶回去）。
@@ -114,14 +119,38 @@ fun ContentTab(
         if (query.isNotBlank()) delay(250)
         loading = true
         failure = null
+        hits = emptyList()
         ModrinthClient.searchProjects(
             query = query,
             type = kind,
             gameVersion = instance.minecraftVersion,
             loader = loaderFilter
-        ).onSuccess { hits = it }
-            .onFailure { failure = it.message ?: "搜索失败" }
+        ).onSuccess {
+            hits = it
+            hasMore = it.size >= PAGE_SIZE
+        }.onFailure { failure = it.message ?: "搜索失败" }
         loading = false
+    }
+
+    // 追加下一页：offset 用已拿到的条数，命中重复就按 project_id 去重（服务端排序可能抖动）。
+    fun loadMore() {
+        if (loadingMore || !hasMore) return
+        loadingMore = true
+        scope.launch {
+            ModrinthClient.searchProjects(
+                query = query,
+                type = kind,
+                gameVersion = instance.minecraftVersion,
+                loader = loaderFilter,
+                offset = hits.size
+            ).onSuccess { page ->
+                val known = hits.mapTo(HashSet()) { it.project_id }
+                val fresh = page.filter { known.add(it.project_id) }
+                hits = hits + fresh
+                hasMore = page.size >= PAGE_SIZE
+            }.onFailure { message = "加载更多失败：" + (it.message ?: "未知错误") }
+            loadingMore = false
+        }
     }
 
     fun install(hit: ModrinthHit) {
@@ -216,15 +245,42 @@ fun ContentTab(
                 )
             }
 
-            else -> items(hits, key = { it.project_id }) { hit ->
-                val installed = remember(hit.project_id, kind, installedTick) {
-                    ContentInstaller.isInstalled(instanceDir, kind, hit.slug)
+            else -> {
+                items(hits, key = { it.project_id }) { hit ->
+                    val installed = remember(hit.project_id, kind, installedTick) {
+                        ContentInstaller.isInstalled(instanceDir, kind, hit.slug)
+                    }
+                    ContentRow(
+                        hit = hit,
+                        installed = installed,
+                        onClick = { install(hit) }
+                    )
                 }
-                ContentRow(
-                    hit = hit,
-                    installed = installed,
-                    onClick = { install(hit) }
-                )
+                // 一页 20 条，滑到底再决定要不要下一页：手机流量与 Modrinth 限额都要省着用。
+                item(key = "__more__") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when {
+                            loadingMore -> Text(
+                                "正在加载…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            hasMore -> TextButton(onClick = { loadMore() }) {
+                                Text("加载更多（已有 " + hits.size + " 条）")
+                            }
+
+                            else -> Text(
+                                "共 " + hits.size + " 条，到底了",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
     }
