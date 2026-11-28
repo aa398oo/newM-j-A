@@ -121,6 +121,13 @@ fun RootScreen() {
         }
     }
 
+    // 进「版本管理」子目录时方块碎一次（UX-22 T5）：子目录 = 钻进方块内部，
+    // 碎裂动画留给子页面当入场背景，所以先 play 再 navigate，两个页面都能看到。
+    fun openInstances() {
+        stage.play(MotionIntent.Shatter)
+        navController.navigate("instances")
+    }
+
     // 方块在窗口里的中心；T3 的道具从屏幕右侧飞到它身上。
     var blockCenter by remember { mutableStateOf(Offset.Zero) }
 
@@ -171,7 +178,7 @@ fun RootScreen() {
                 composable("home") {
                     HomeScreen(
                         container = container,
-                        onOpenInstances = { navController.navigate("instances") },
+                        onOpenInstances = ::openInstances,
                         onOpenDownloads = { navigateTab("downloads") }
                     )
                 }
@@ -186,7 +193,7 @@ fun RootScreen() {
                 composable("downloads") {
                     DownloadsScreen(
                         container = container,
-                        onOpenInstances = { navController.navigate("instances") }
+                        onOpenInstances = ::openInstances
                     )
                 }
                 composable("settings") {
@@ -198,7 +205,7 @@ fun RootScreen() {
                 composable("more") {
                     MoreScreen(
                         container = container,
-                        onOpenInstances = { navController.navigate("instances") },
+                        onOpenInstances = ::openInstances,
                         onOpenSettings = { navigateTab("settings") }
                     )
                 }

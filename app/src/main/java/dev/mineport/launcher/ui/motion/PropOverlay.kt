@@ -66,6 +66,13 @@ fun PropOverlay(
 
             MotionProp.None -> Unit
         }
+
+        // T5 碎裂粒子：与道具互斥（碎裂时 prop 为 None），单 t 驱动，
+        // 只在这一帧有值时才计算，shatter 归零后完全不再进循环。
+        val sh = stage.shatter.value
+        if (sh > 0.001f) {
+            drawShards(t = sh, center = blockCenter, accent = accent)
+        }
     }
 }
 
@@ -210,5 +217,40 @@ private fun DrawScope.drawPropBrush(
             size = Size(w, h * 0.70f),
             cornerRadius = CornerRadius(2.dp.toPx())
         )
+    }
+}
+
+/**
+ * T5 碎裂粒子：12 块小方块，固定角度 + 初速，位置全是 t 的函数。
+ *
+ * 为什么不做 12 个 Animatable：12 条动画 = 12 次状态写入 + 12 次重组调度；
+ * 这里只有一个 `shatter` 在动，绘制时按 t 算出位置，成本是一次 for 循环。
+ * 抛物线用 `0.5 * g * t²`，旋转按块号奇偶反向，看起来就是炸开的方块。
+ */
+private fun DrawScope.drawShards(t: Float, center: Offset, accent: Color) {
+    val count = 12
+    val gravity = 900f
+    val baseSpeed = 120.dp.toPx()
+    val base = Color(0xFF2E8B57)
+
+    for (i in 0 until count) {
+        val angle = Math.toRadians((i * (360.0 / count) + 12.0))
+        val speed = baseSpeed * (0.55f + 0.45f * ((i % 3) / 2f))
+        // 每块错开 2% 起始延迟，避免 12 块同时起步显得假。
+        val local = (t - 0.02f * i).coerceIn(0f, 1f)
+        if (local <= 0f) continue
+        val x = center.x + cos(angle).toFloat() * speed * local * 1.8f
+        val y = center.y + sin(angle).toFloat() * speed * local * 1.8f +
+            0.5f * gravity * local * local
+        val size = (7.dp.toPx() * (1f - local * 0.7f)).coerceAtLeast(1f)
+        val alpha = (1f - local).coerceIn(0f, 1f)
+        val color = if (i % 3 == 0) accent.copy(alpha = alpha) else base.copy(alpha = alpha)
+        rotate(degrees = local * 220f * if (i % 2 == 0) 1f else -1f, pivot = Offset(x, y)) {
+            drawRect(
+                color = color,
+                topLeft = Offset(x - size / 2f, y - size / 2f),
+                size = Size(size, size)
+            )
+        }
     }
 }

@@ -310,6 +310,14 @@ must('底层保留命令方块原色', commandBlock, /drawCommandBlock\(accent =
 must('刷柄斜 18 度', propOverlay, /rotate\(degrees = 18f, pivot = Offset\(x, y\)\)/, '正着画像块橡皮');
 must('刷完方块轻抬', motionStage, /blockScale\.animateTo\(1\.03f, tween\(90, easing = Motion\.Ease\)\)/, '刷完要"活"过来一下');
 mustNot('材质不做模糊过渡', commandBlock, /Modifier\.blur|RenderEffect/, '红线：禁重度 blur');
+// ── UX-22 T5：进子目录时方块碎裂 + 粒子爆开 ──────────────
+must('子目录走统一入口', rootScreen, /fun openInstances\(\) \{[\s\S]{0,200}?stage\.play\(MotionIntent\.Shatter\)/, '三处入口都要碎，收敛成一个函数才不会漏');
+must('碎裂先播再导航', rootScreen, /stage\.play\(MotionIntent\.Shatter\)\s*\r?\n\s*navController\.navigate\("instances"\)/, '方块是单例，跨页面继续播');
+must('粒子由单一 t 驱动', propOverlay, /private fun DrawScope\.drawShards\(t: Float/, '12 条 Animatable 就是 12 次重组调度');
+must('粒子抛物线', propOverlay, /0\.5f \* gravity \* local \* local/, '匀加速下坠才像碎块');
+must('粒子错峰起步', propOverlay, /\(t - 0\.02f \* i\)\.coerceIn\(0f, 1f\)/, '同时起步像爆炸贴图');
+must('碎裂有重力常数', propOverlay, /val gravity = 900f/, '像素/秒²，和 MotionMode 无关');
+mustNot('碎裂不用粒子库', propOverlay, /ParticleSystem|confetti|lottie/i, '红线：全 Canvas 几何');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
