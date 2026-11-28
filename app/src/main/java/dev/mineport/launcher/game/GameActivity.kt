@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +69,42 @@ class GameActivity : ComponentActivity() {
 
     /** 自动收起的 1s ticker；onDestroy 必须停掉。 */
     private var idleHandler: android.os.Handler? = null
+
+    private var errorBanner: TextView? = null
+
+    /**
+     * 把失败原因直接画在屏幕上。
+     *
+     * 真机上用户不会连 adb，`status()` 只写 logcat，等于没提示——黑屏 + 没有任何字，
+     * 用户只能以为「坏了」。这里用最简单的 TextView 覆盖层：不依赖 Compose，
+     * 也不受 Surface/GL 线程影响。
+     */
+    private fun showBanner(text: String) {
+        runOnUiThread {
+            val tv = errorBanner ?: TextView(this).apply {
+                setTextColor(0xFFFFFFFF.toInt())
+                textSize = 15f
+                setPadding(56, 36, 56, 36)
+                setBackgroundColor(0xE6000000.toInt())
+                gravity = android.view.Gravity.CENTER
+                setTextIsSelectable(true)
+            }.also { view ->
+                val lp = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply { gravity = android.view.Gravity.CENTER }
+                root.addView(view, lp)
+                errorBanner = view
+            }
+            tv.text = text
+            tv.visibility = android.view.View.VISIBLE
+        }
+    }
+
+    /** 失败时给一句可操作的下一步，别只丢异常信息。 */
+    private fun hintsFor(text: String): String = text + "\n\n" +
+        "如果反复失败：把本应用从最近任务里划掉再重开（一个进程只能建一次 JVM）；" +
+        "仍然不行就把这段文字连同 files/logs 里的日志发给开发者。"
 
     private fun status(text: String) {
         Log.i(TAG, text)
@@ -316,10 +353,12 @@ class GameActivity : ComponentActivity() {
         val plan = planResult.getOrNull()
         if (plan == null) {
             StartupTrace.mark(this, "plan-missing")
-            status(
-                "未安装 " + launchVersionId + "，或版本文件不完整：" +
+            val why = hintsFor(
+                "未安装 " + versionId + "，或版本文件不完整：" +
                     (planResult.exceptionOrNull()?.message ?: "")
             )
+            status(why)
+            showBanner(why)
             return
         }
 
@@ -411,16 +450,22 @@ class GameActivity : ComponentActivity() {
                 }
                 StartupTrace.mark(this, "main-exit=" + exit)
                 if (exit == -4) {
-                    status("本进程已经运行过一次游戏，JVM 不能复用。\n请从最近任务里彻底划掉本应用后重新启动。")
+                    val why = hintsFor("本进程已经运行过一次游戏，JVM 不能复用。\n请从最近任务里彻底划掉本应用后重新启动。")
+                    status(why)
+                    showBanner(why)
                 } else if (exit != 0) {
-                    status("游戏启动失败（code=" + exit + "）：" + JvmLauncher.lastError())
+                    val why = hintsFor("游戏启动失败（code=" + exit + "）：" + JvmLauncher.lastError())
+                    status(why)
+                    showBanner(why)
                 } else {
                     status("游戏已退出")
                 }
             }
             is JvmStartResult.Failed -> {
                 StartupTrace.mark(this, "jvm-failed:" + result.message)
-                status("启动失败：" + result.message)
+                val why = hintsFor("启动失败：" + result.message)
+                status(why)
+                showBanner(why)
             }
         }
     }

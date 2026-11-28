@@ -210,6 +210,16 @@ add('main 调用次数有上限', /g_launchedCount >= kMaxMainLaunches/.test(cod
 add('不再有全局一次性开关', !/g_mainConsumed/.test(codeOnly(jni)),
   '旧的 atomic<bool> 与按类名去重都已撤掉');
 
+add('启动失败信息上屏', /private fun showBanner\(text: String\)/.test(codeOnly(activity)),
+  '没接 adb 的用户看不到 logcat，失败必须画到屏幕上');
+add('失败覆盖层用 TextView', /errorBanner \?: TextView\(this\)/.test(codeOnly(activity))
+  && /root\.addView\(view, lp\)/.test(codeOnly(activity)),
+  'Compose/GL 在失败态可能不可用，最简单的 View 最可靠');
+add('三个失败分支都上屏', (codeOnly(activity).match(/showBanner\(why\)/g) || []).length >= 3,
+  '只提示一处等于另外两处仍然黑屏');
+add('失败给出可操作建议', /一个进程只能建一次 JVM/.test(codeOnly(activity)),
+  '只说「失败了」等于没说');
+
 const failed = checks.filter((c) => !c.ok);
 for (const c of checks) {
   console.log((c.ok ? '  OK   ' : ' FAIL  ') + c.name + '  —  ' + c.detail);
