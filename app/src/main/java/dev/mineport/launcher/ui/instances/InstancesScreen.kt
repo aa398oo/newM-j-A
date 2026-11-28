@@ -52,6 +52,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
 import dev.mineport.launcher.ui.components.PageHeader
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -200,23 +202,34 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(instance.name, style = MaterialTheme.typography.titleSmall)
+                            // 两行而不是三行：横屏一屏能多露一条，且「内存/Java/时间」
+                            // 这类元信息并进第二行当后缀就够了。
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    instance.name,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                // 玩过的才显示时间：从没玩过的版本写「未玩过」只是噪音。
+                                if (instance.lastPlayedEpochMs > 0L) {
+                                    Text(
+                                        relativeTime(instance.lastPlayedEpochMs),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(2.dp))
                             Text(
-                                instance.subtitle + " · " + instance.renderBackend.displayName,
+                                instance.subtitle + " · " + instance.renderBackend.displayName +
+                                    " · " + instance.memoryMB + " MB",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                buildString {
-                                    append(instance.memoryMB).append(" MB · Java ")
-                                        .append(javaMajorFor(instance.minecraftVersion))
-                                    // 玩过的才显示时间：从没玩过的版本写「未玩过」只是噪音。
-                                    if (instance.lastPlayedEpochMs > 0L) {
-                                        append(" · ").append(relativeTime(instance.lastPlayedEpochMs))
-                                    }
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                         IconButton(onClick = { context.startActivity(GameActivity.intent(context, instance.id)) }) {

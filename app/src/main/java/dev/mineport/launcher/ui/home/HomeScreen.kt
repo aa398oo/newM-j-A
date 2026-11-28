@@ -176,8 +176,8 @@ private fun HeroCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LoaderChip(instance.loader)
@@ -296,7 +296,7 @@ private fun ReadyChips(
     onOpenDownloads: () -> Unit,
     onOpenInstances: () -> Unit
 ) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (instance.loader == Loader.VANILLA && (ready.mods ?: 0) == 0) {
             ActionChip("+ 装 Fabric", onOpenDownloads)
         } else {
@@ -328,7 +328,7 @@ private fun ActionChip(label: String, onClick: () -> Unit) {
             .clip(RoundedCornerShape(50))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .padding(horizontal = 11.dp, vertical = 6.dp)
     )
 }
 
@@ -407,7 +407,9 @@ private fun GalleryCard(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                instance.subtitle,
+                // 画廊卡只有 ~150dp 宽，subtitle 里带 loader 版本号（fabric-loader-0.20.1-…）
+                // 必然截断，这里只留「MC 版本 · 加载器名」。
+                instance.minecraftVersion + " · " + instance.loader.displayName,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

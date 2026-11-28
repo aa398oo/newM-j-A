@@ -281,6 +281,9 @@ must('动画只进 graphicsLayer', commandBlock, /graphicsLayer \{[\s\S]{0,300}?
 mustNot('禁止重度模糊', commandBlock, /\.blur\(/, '模糊用径向渐变叠色替代');
 mustNot('禁止第三方动画库', motionStage, /Lottie|WebView|ExoPlayer/, '只用 Compose 动画 API');
 must('动画长在图标上', rootScreen, /RailGlyphIcon\([\s\S]{0,200}?stage = stage/, 'rail 图标本身就是动画载体');
+must('点 tab 只压缩图标', rootScreen, /stage\.play\(MotionIntent\.TabImpact, tab\.glyph\)/, '道具动画撤掉后只留图标压缩+白闪');
+mustNot('不再飞道具', rootScreen, /PropOverlay\(/, 'PropOverlay 已从外壳移除');
+must('图标压缩与白闪仍在', glyph, /stage\.blockScale\.value/, '撞击反馈靠 scale + flash');
 mustNot('rail 不再挂独立方块', rootScreen, /CommandBlock\(/, '方块已从 rail 移除');
 must('导航触发撞击', rootScreen, /stage\.play\(MotionIntent\.TabImpact, tab\.glyph\)/, '点哪一项，哪一项的图标压缩+白闪');
 // ── UX-22 T2：rail 拖拽 / 惯性 / 吸附 ─────────────────────
@@ -301,19 +304,14 @@ must('齿轮中心挖孔', propOverlay, /PathOperation\.Difference/, 'overlay �
 must('冲入用减速曲线', motionStage, /CubicBezierEasing\(0\.1f, 0\.9f, 0\.2f, 1f\)/, '前 60% 走完 90% 距离，撞前减速才有重量');
 must('撞击后道具弹开', motionStage, /propRecoil\.animateTo\(1f/, '被顶回来才有反作用力');
 must('道具用枚举而不是位图', motionStage, /enum class MotionProp \{ None, Arrow, Gear, Brush \}/, '以后加刷子/丝带只需加枚举值');
-must('下载页用箭头', rootScreen, /"downloads" -> stage\.play\(MotionIntent\.DownloadImpact, tab\.glyph\)/, '箭头撞下载图标本身');
-must('设置页用齿轮', rootScreen, /"settings" -> stage\.play\(MotionIntent\.SettingsImpact, tab\.glyph\)/, '齿轮扣合在设置图标上');
 must('方块位置上报给 overlay', commandBlock, /coords\.boundsInRoot\(\)\.center/, 'overlay 要知道往哪儿飞');
 mustNot('道具不用 ImageVector', propOverlay, /ImageVector|painterResource/, '矢量图也要 Canvas 手绘');
 // ── UX-22 T4：个性化刷子 + 材质逐段显现 ─────────────────
-must('个性化页用刷子', rootScreen, /"personalize" -> stage\.play\(MotionIntent\.PersonalizeBrush, tab\.glyph\)/, '刷子把调色板图标刷成彩色');
 must('五个图标枚举', glyph, /enum class RailGlyph \{ Play, Download, Settings, Palette, More \}/, '图标全部自绘');
 must('齿轮 32 采样点', glyph, /val points = 32/, '8 齿靠 32 点采样');
 must('调色板挖孔', glyph, /PathOperation\.Difference/, '圆盘挖孔 + 笔尖缺口');
 must('材质用 clipRect 刷出', glyph, /clipRect\(right = size\.width \* material\)/, '从左到右露出主色版');
 must('动画值在 draw 阶段读', glyph, /graphicsLayer \{[\s\S]{0,240}?stage\.blockScale\.value/, '不逐帧重组');
-must('每个图标上报中心', rootScreen, /onCenter\(it\.boundsInRoot\(\)\.center\)/, '道具要知道往哪儿飞');
-must('道具目标取当前图标', rootScreen, /glyphCenters\[stage\.glyph\]/, '箭头/齿轮/丝带都追当前动作的图标');
 must('刷子是独立枚举', motionStage, /enum class MotionProp \{ None, Arrow, Gear, Brush \}/, '刷子和箭头/齿轮共用一套 overlay');
 must('刷子与材质同源同步', motionStage, /launch \{ blockMaterial\.animateTo\(1f, tween\(Motion\.MediumMs, easing = LinearEasing\)\) \}/, '刷到哪亮到哪，两条时间轴必须一致');
 must('材质用 clipRect 裁切', commandBlock, /clipRect\(right = size\.width \* mat\)/, '免逐像素混合，O(1) 裁切');

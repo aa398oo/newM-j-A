@@ -70,7 +70,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.runtime.mutableStateMapOf
 import dev.mineport.launcher.ui.motion.LocalMotionStage
 import dev.mineport.launcher.ui.motion.MotionStage
-import dev.mineport.launcher.ui.motion.PropOverlay
 import dev.mineport.launcher.ui.motion.RailGlyph
 import dev.mineport.launcher.ui.motion.RailGlyphIcon
 import dev.mineport.launcher.ui.personalize.PersonalizeScreen
@@ -128,9 +127,8 @@ fun RootScreen() {
         navController.navigate("instances")
     }
 
-    // 每个 rail 图标在窗口里的中心。道具从屏幕右侧飞来时，目标是「当前动作的那个图标」，
-    // 而不是一个额外的方块——UX-22 的六种动画都长在图标自己身上。
-    val glyphCenters = remember { mutableStateMapOf<RailGlyph, Offset>() }
+    // 动画只保留「图标自己压缩 + 白闪」这一层：道具（箭头/齿轮/刷子/丝带/碎片）
+    // 在小尺寸图标上读不出形状，反而挡视线，已按 2026-11-28 的评审意见撤掉。
 
     Box(Modifier.fillMaxSize()) {
     CompositionLocalProvider(LocalMotionStage provides stage) {
@@ -139,7 +137,6 @@ fun RootScreen() {
             currentRoute = currentRoute,
             onNavigate = ::navigateTab,
             stage = stage,
-            onGlyphCenter = { glyph, center -> glyphCenters[glyph] = center }
         )
         // rail 与内容区之间 1dp 分隔线；比给 rail 加边框省一层绘制。
         Box(
@@ -215,12 +212,6 @@ fun RootScreen() {
         }
     }
     }
-        // 道具层盖在整个外壳之上（含 rail），但不拦触摸。
-        PropOverlay(
-            stage = stage,
-            accent = MaterialTheme.colorScheme.primary,
-            blockCenter = glyphCenters[stage.glyph] ?: Offset.Zero
-        )
     }
 }
 
@@ -229,7 +220,7 @@ private fun NavRail(
     currentRoute: String?,
     onNavigate: (String) -> Unit,
     stage: MotionStage,
-    onGlyphCenter: (RailGlyph, Offset) -> Unit
+
 ) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -284,16 +275,9 @@ private fun NavRail(
                     stage = stage,
                     onClick = {
                         onNavigate(tab.route)
-                        // 动画作用在「被点的那个图标」上：下载=箭头撞它、设置=齿轮扣合它、
-                        // 个性化=刷子刷它、其余=压缩+白闪。
-                        when (tab.route) {
-                            "downloads" -> stage.play(MotionIntent.DownloadImpact, tab.glyph)
-                            "settings" -> stage.play(MotionIntent.SettingsImpact, tab.glyph)
-                            "personalize" -> stage.play(MotionIntent.PersonalizeBrush, tab.glyph)
-                            else -> stage.play(MotionIntent.TabImpact, tab.glyph)
-                        }
-                    },
-                    onCenter = { c -> onGlyphCenter(tab.glyph, c) }
+                        // 只做「被点的图标压一下 + 白闪」，六种道具动画已撤。
+                        stage.play(MotionIntent.TabImpact, tab.glyph)
+                    }
                 )
             }
         }
@@ -319,8 +303,7 @@ private fun RailItem(
     tab: NavTab,
     selected: Boolean,
     stage: MotionStage,
-    onClick: () -> Unit,
-    onCenter: (Offset) -> Unit
+    onClick: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     val animations = LocalAnimationsEnabled.current
@@ -342,13 +325,7 @@ private fun RailItem(
         animationSpec = tween(if (animations) Motion.RailBarMs else 0, easing = Motion.Ease),
         label = "railBar"
     )
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            // 道具（箭头/齿轮/丝带）要知道往哪儿飞：这里上报图标中心。
-            .onGloballyPositioned { onCenter(it.boundsInRoot().center) }
-    ) {
+    Box(Modifier.fillMaxWidth().height(52.dp)) {
         // 「左侧贴边 3dp 主蓝色条」：贴的是 rail 自己的左边缘（= 屏幕左边缘 + inset）。
         Box(
             Modifier

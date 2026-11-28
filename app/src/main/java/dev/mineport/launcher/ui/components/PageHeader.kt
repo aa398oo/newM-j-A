@@ -52,11 +52,17 @@ fun PageHeader(
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            // 这行标题直接摆在 Row 里，没有 Surface 兜底，LocalContentColor 会退回 Color.Black
+            // —— 深色主题下就是「黑底黑字」，必须显式取 onSurface。
+            color = MaterialTheme.colorScheme.onSurface
         )
         if (subtitle != null) {
             Spacer(Modifier.width(10.dp))
             Text(
+                // 20sp 标题与 12sp 副标题居中对齐会显得副标题「浮」在半空，
+                // 往下压 3dp 更接近视觉基线。
+                modifier = Modifier.padding(top = 3.dp),
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -196,7 +196,10 @@ private fun DownloadTopBar(
             Text(
                 "下载",
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                // 这里是自绘顶栏，不在 Surface 里，默认 LocalContentColor 是黑的；
+                // 深色主题下必须显式取 onSurface。
+                color = cs.onSurface
             )
             Spacer(Modifier.width(12.dp))
             if (tab.type == null) {

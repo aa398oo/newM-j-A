@@ -256,7 +256,9 @@ fun VersionInstallScreen(
             Text(
                 "安装 " + version.id,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                // 自绘顶栏不在 Surface 内，深色主题默认取到黑色。
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.weight(1f))
             Text(
@@ -531,7 +533,9 @@ private fun FabricLoaderPicker(
             Text(
                 "Fabric · " + minecraftVersion,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                // 自绘顶栏不在 Surface 内，深色主题默认取到黑色。
+                color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.weight(1f))
             if (options != null) {
