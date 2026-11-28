@@ -58,20 +58,42 @@ class ActionPad(
     /**
      * 计算命中槽位。
      *
-     * @param cx/cy 轮盘圆心
-     * @param radius 轮盘半径（外缘）
-     * @return 槽位下标；-1 表示落在中心圆（不触发）或圆外
+     * 按豆包评审建议：命中用**像素**而不是 dp/百分比，径向用**带**判定，角度加**滞回**。
+     * - 径向内带：`dist < innerPx` 视为中心圆（留给「收起」按钮），不触发
+     * - 径向外带：`dist > radius - outerMarginPx`（即超出外缘）不触发
+     * - 角度滞回：手指停在两个扇区交界附近时，只要还落在 [lastIndex] 的 ±[HYSTERESIS_DEG] 内就保持不动，
+     *   避免手指轻微抖动导致「W→W+D→W」的键位闪跳
+     *
+     * @param cx/cy 轮盘圆心（px）
+     * @param radius 轮盘半径（px）
+     * @param innerPx 中心圆半径（px）
+     * @param lastIndex 上一次命中的槽位；-1 表示没有
+     * @return 槽位下标；-1 表示落在中心圆或圆外
      */
-    fun hit(cx: Float, cy: Float, x: Float, y: Float, radius: Float): Int {
+    fun hit(
+        cx: Float,
+        cy: Float,
+        x: Float,
+        y: Float,
+        radius: Float,
+        innerPx: Float = radius * CENTER_RATIO,
+        lastIndex: Int = -1,
+    ): Int {
         val dx = x - cx
         val dy = y - cy
         val dist = sqrt(dx * dx + dy * dy)
-        // 中心圆不触发：那里留给「收起」按钮
-        if (dist < radius * CENTER_RATIO) return -1
-        // 外圈留白：手指点到边缘外不算
+        if (dist < innerPx) return -1
         if (dist > radius * OUTER_RATIO) return -1
-        val deg = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 90.0 + 360.0) % 360.0
+
         val step = 360.0 / slots.size
+        val deg = (Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 90.0 + 360.0) % 360.0
+
+        // 角度滞回：仍在上一次槽位的角度带里就保持
+        if (lastIndex in slots.indices) {
+            val centerDeg = lastIndex * step
+            val delta = kotlin.math.abs(((deg - centerDeg + 540.0) % 360.0) - 180.0)
+            if (delta < HYSTERESIS_DEG) return lastIndex
+        }
         return (((deg + step / 2.0) % 360.0) / step).toInt() % slots.size
     }
 
@@ -112,6 +134,9 @@ class ActionPad(
     companion object {
         /** 中心圆占半径的比例（点这里收起）。 */
         const val CENTER_RATIO = 0.32f
+
+        /** 角度滞回宽度（度）：手指在扇区交界 ±3° 内不切换。 */
+        const val HYSTERESIS_DEG = 6.0
 
         /** 外缘判定比例（超过就不触发）。 */
         const val OUTER_RATIO = 1.15f
