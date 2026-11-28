@@ -32,6 +32,9 @@ class GameHostLayout @JvmOverloads constructor(
     /** 左侧浮动摇杆（UX-21）。由 GameActivity 注入；为空时左半屏仍按原逻辑注入鼠标。 */
     var movePad: MovePad? = null
 
+    /** 动作轮盘逻辑（可收起 / 可绑定 / 带角度滞回）。注入后命中判定优先走它。 */
+    var actionPad: ActionPad? = null
+
     /** 轮盘动作回调：true=按下（持续），false=松开。 */
     var onWheelAction: ((ActionSlot, Boolean) -> Unit)? = null
 
@@ -52,7 +55,7 @@ class GameHostLayout @JvmOverloads constructor(
                 val id = ev.getPointerId(i)
                 val x = ev.getX(i)
                 val y = ev.getY(i)
-                val idx = pickWheelIndex(x, y)
+                val idx = pickWheelIndex(x, y, id)
                 if (idx >= 0 || inWheelCircle(x, y)) {
                     owners.put(id, OWNER_WHEEL)
                     wheelIndex.put(id, idx)
@@ -141,12 +144,26 @@ class GameHostLayout @JvmOverloads constructor(
         return hypot(dx, dy) <= outer
     }
 
-    /** 命中扇区；返回 -1 表示在圆内但没选中（中心死区或超出扇区半径）。 */
-    private fun pickWheelIndex(x: Float, y: Float): Int {
+    /**
+     * 命中扇区；返回 -1 表示在圆内但没选中（中心死区或超出扇区半径）。
+     *
+     * 注入了 [actionPad] 时走它的 `hit()` —— 那套算法带**角度滞回**（[id] 用来取上一次槽位），
+     * 手指停在扇区交界不会闪跳。没注入时退回旧的纯几何算法。
+     */
+    private fun pickWheelIndex(x: Float, y: Float, id: Int = -1): Int {
         val w = wheelView ?: return -1
+        if (w.width == 0 || w.height == 0) return -1
+        val cx = w.left + w.width / 2f
+        val cy = w.top + w.height / 2f
+        val pad = actionPad
+        if (pad != null) {
+            val r = minOf(w.width, w.height) * 0.5f
+            val last = if (id >= 0) wheelIndex.get(id, -1) else -1
+            return pad.hit(cx, cy, x, y, r, innerPx = 24f, lastIndex = last)
+        }
         if (!inWheelCircle(x, y)) return -1
-        val dx = x - (w.left + w.width / 2f)
-        val dy = y - (w.top + w.height / 2f)
+        val dx = x - cx
+        val dy = y - cy
         val dist = hypot(dx, dy)
         if (dist < 24f) return -1
         var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()

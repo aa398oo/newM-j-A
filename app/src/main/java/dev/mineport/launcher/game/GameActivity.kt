@@ -165,6 +165,13 @@ class GameActivity : ComponentActivity() {
         }
         host.movePad = movePad
 
+        // 动作轮盘逻辑：默认 8 槽；命中由 host 按 pointer 计算（带角度滞回），
+        // 按下/抬起经 handleWheel 转到 nativeSendKey。后续接 Prefs 后可改绑。
+        val actionPad = dev.mineport.launcher.input.ActionPad(
+            dev.mineport.launcher.input.ActionPad.defaultSlots(),
+        ) { slot, down -> handleWheel(slot, down) }
+        host.actionPad = actionPad
+
         // 摇杆绘制层：铺满全屏的透明 ComposeView，只画基座与摇杆头，不消费触摸。
         val padOverlay = ComposeView(this).apply {
             setContent {
