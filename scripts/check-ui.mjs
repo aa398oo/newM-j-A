@@ -241,6 +241,8 @@ must('换关键词重置列表', contentTab, /hits = emptyList\(\)[\s\S]{0,400}?
 
 // —— UX-19 .mptheme 主题包 ——
 const themePack = read('app/src/main/java/dev/mineport/launcher/ui/theme/ThemePack.kt');
+const motionStage = read('app/src/main/java/dev/mineport/launcher/ui/motion/MotionStage.kt');
+const commandBlock = read('app/src/main/java/dev/mineport/launcher/ui/motion/CommandBlock.kt');
 must('主题包模型', themePack, /@Serializable[\s\S]{0,80}?data class ThemePack\(/, 'UX-19：主题包是一个可序列化的清单');
 must('主题包扩展名', themePack, /const val EXTENSION = "\.mptheme"/, '对外约定 .mptheme');
 must('主题包是 zip', themePack, /ZipOutputStream\([\s\S]{0,4000}?ZipInputStream\(/, '以后要塞预览图/字体，json 直接当文件不够');
@@ -258,6 +260,24 @@ must('选预设清掉自定义', prefs, /accentCustom = null[\s\S]{0,120}?remove
 must('MainActivity 传自定义色', main, /Prefs\.accentColor\(prefs\.accent, prefs\.accentCustom\)/, '自定义色要真的进主题');
 must('个性化页有自定义色位', personalize, /prefs\.accentCustom\?\.let \{ hex ->/, '导入任意色后要能看到并保留它');
 
+// ── UX-22 T1：命令方块动画宿主 ─────────────────────────────
+must('UX-22 动画宿主', motionStage, /class MotionStage\(/, '四层并行共用一个动画值容器');
+must('换事件取消旧事件', motionStage, /private val mutex = MutatorMutex\(\)[\s\S]{0,2600}?mutex\.mutate/, '可打断靠 MutatorMutex，不靠手写取消');
+must('方块动画值齐全', motionStage, /val blockY = Animatable\(0f\)[\s\S]{0,400}?val blockMaterial = Animatable\(0f\)/, '位移/缩放/旋转/材质都要能单独驱动');
+must('碎裂与丝带预留', motionStage, /val propProgress = Animatable\(0f\)[\s\S]{0,400}?val shatter = Animatable\(0f\)/, 'T5/T6 直接接值，不用改宿主');
+must('撞击用 spring 回弹', motionStage, /spring\(dampingRatio = 0\.30f, stiffness = 1100f\)/, '过冲一次比 tween 更像被撞');
+must('白闪用关键帧', motionStage, /keyframes \{[\s\S]{0,300}?220/, '只有单帧级别的视觉才用关键帧');
+must('关动效直接落终态', motionStage, /if \(reduceMotion\) \{[\s\S]{0,200}?snapTo/, '同一个入口，不做第二套逻辑');
+must('逻辑阶段只做展示', motionStage, /var stage by mutableStateOf\(MotionStageState\.Idle\)/, 'State 只表达阶段，动画值走 Animatable');
+must('事件枚举', motionStage, /enum class MotionIntent \{[\s\S]{0,200}?TabImpact/, 'T1 先接导航撞击');
+must('方块纯 Canvas 绘制', commandBlock, /fun DrawScope\.drawCommandBlock\(accent: Color, material: Float, flash: Float\)/, '禁止切图，40dp→160dp 不糊');
+must('等距三面', commandBlock, /val top = Path\(\)\.apply \{[\s\S]{0,600}?val right = Path\(\)\.apply/, '顶面菱形 + 左右侧面');
+must('颜色跟主色', commandBlock, /lerp\(base, accent, material \* 0\.8f\)/, '唤醒程度由材质值控制');
+must('动画只进 graphicsLayer', commandBlock, /graphicsLayer \{[\s\S]{0,300}?stage\.blockScale\.value/, '绘制阶段读 state，不触发重组');
+mustNot('禁止重度模糊', commandBlock, /\.blur\(/, '模糊用径向渐变叠色替代');
+mustNot('禁止第三方动画库', motionStage, /Lottie|WebView|ExoPlayer/, '只用 Compose 动画 API');
+must('方块挂到外壳', rootScreen, /CommandBlock\([\s\S]{0,160}?stage = stage/, '方块常驻 rail 底部');
+must('导航触发撞击', rootScreen, /stage\.play\(MotionIntent\.TabImpact\)/, '点 rail 任意项都撞一下');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

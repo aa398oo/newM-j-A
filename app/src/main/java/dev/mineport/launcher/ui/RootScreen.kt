@@ -39,6 +39,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -58,8 +60,11 @@ import dev.mineport.launcher.ui.downloads.DownloadsScreen
 import dev.mineport.launcher.ui.home.HomeScreen
 import dev.mineport.launcher.ui.instances.InstancesScreen
 import dev.mineport.launcher.ui.more.MoreScreen
+import dev.mineport.launcher.ui.motion.CommandBlock
 import dev.mineport.launcher.ui.motion.LocalAnimationsEnabled
 import dev.mineport.launcher.ui.motion.Motion
+import dev.mineport.launcher.ui.motion.MotionIntent
+import dev.mineport.launcher.ui.motion.MotionStage
 import dev.mineport.launcher.ui.personalize.PersonalizeScreen
 import dev.mineport.launcher.ui.settings.SettingsScreen
 import dev.mineport.launcher.ui.theme.MonoFontFamily
@@ -90,6 +95,10 @@ fun RootScreen() {
     val backStack by navController.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val animations = LocalAnimationsEnabled.current
+    // UX-22：整个外壳只有这一个动画宿主。放在 RootScreen 而不是各页面，
+    // 是因为方块是「导航的载体」——切页时它要活着，页面重建时它不能被销毁。
+    val motionScope = rememberCoroutineScope()
+    val stage = remember(animations) { MotionStage(motionScope, reduceMotion = !animations) }
 
     LaunchedEffect(Unit) {
         container.instanceStore.load()
@@ -106,7 +115,8 @@ fun RootScreen() {
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         NavRail(
             currentRoute = currentRoute,
-            onNavigate = ::navigateTab
+            onNavigate = ::navigateTab,
+            stage = stage
         )
         // rail 与内容区之间 1dp 分隔线；比给 rail 加边框省一层绘制。
         Box(
@@ -184,7 +194,7 @@ fun RootScreen() {
 }
 
 @Composable
-private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit) {
+private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit, stage: MotionStage) {
     val cs = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
@@ -203,9 +213,26 @@ private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit) {
             // instances 不属于任何 tab，但它由「启动」页进入，高亮留在启动上。
             val selected = currentRoute == tab.route ||
                 (currentRoute == "instances" && tab.route == "home")
-            RailItem(tab = tab, selected = selected, onClick = { onNavigate(tab.route) })
+            RailItem(
+                tab = tab,
+                selected = selected,
+                onClick = {
+                    onNavigate(tab.route)
+                    // 导航不是「换页」而是「方块被撞一下」：T2 起方块会真的被推下去，
+                    // 现在先把事件通路接上，点哪一项都能看到撞击回弹。
+                    stage.play(MotionIntent.TabImpact)
+                }
+            )
         }
         Spacer(Modifier.weight(1f))
+        // 方块常驻在 rail 底部：横屏高约 375dp，rail 上方 5 项占 260dp，
+        // 底部这块是唯一不会被内容区抢走的位置。
+        CommandBlock(
+            stage = stage,
+            accent = cs.primary,
+            modifier = Modifier.size(42.dp)
+        )
+        Spacer(Modifier.height(2.dp))
         Text(
             text = "v${BuildConfig.VERSION_NAME}-alpha",
             style = MaterialTheme.typography.labelSmall.copy(
