@@ -1,4 +1,4 @@
-﻿package dev.mineport.launcher.ui.personalize
+package dev.mineport.launcher.ui.personalize
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,7 +31,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -46,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import dev.mineport.launcher.ui.components.PageHeader
 import androidx.compose.ui.unit.sp
 import dev.mineport.launcher.AppContainer
 import dev.mineport.launcher.input.PadPrefs
@@ -75,37 +75,44 @@ fun PersonalizeScreen(container: AppContainer) {
     var hudAlphaPct by remember { mutableFloatStateOf(padPrefs.actionPadAlpha * 100f) }
     var hudLeft by remember { mutableStateOf(padPrefs.isActionPadLeft()) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("个性化") }) }) { padding ->
-        Row(
+    Scaffold { padding ->
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(
+            PageHeader("个性化")
+            Row(
                 modifier = Modifier
-                    .weight(1.1f)
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .weight(1f)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                EnterFromBottom(0) { ThemeCard(prefs) }
-                EnterFromBottom(1) { AccentCard(prefs) }
-                EnterFromBottom(2) { MotionCard(prefs) }
-                EnterFromBottom(3) {
-                    HudCard(
-                        sizeDp = hudSizeDp,
-                        alphaPct = hudAlphaPct,
-                        left = hudLeft,
-                        onSize = { hudSizeDp = it; padPrefs.actionPadSizeDp = it },
-                        onAlpha = { hudAlphaPct = it; padPrefs.actionPadAlpha = it / 100f },
-                        onCorner = { hudLeft = it; padPrefs.setActionPadCorner(it) }
-                    )
+                Column(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    EnterFromBottom(0) { ThemeCard(prefs) }
+                    EnterFromBottom(1) { AccentCard(prefs) }
+                    EnterFromBottom(2) { MotionCard(prefs) }
+                    EnterFromBottom(3) {
+                        HudCard(
+                            sizeDp = hudSizeDp,
+                            alphaPct = hudAlphaPct,
+                            left = hudLeft,
+                            onSize = { hudSizeDp = it; padPrefs.actionPadSizeDp = it },
+                            onAlpha = { hudAlphaPct = it; padPrefs.actionPadAlpha = it / 100f },
+                            onCorner = { hudLeft = it; padPrefs.setActionPadCorner(it) }
+                        )
+                    }
                 }
-            }
-            Column(modifier = Modifier.weight(0.9f).fillMaxHeight()) {
-                EnterFromBottom(1) { PreviewCard() }
+                Column(modifier = Modifier.weight(0.9f).fillMaxHeight()) {
+                    EnterFromBottom(1) { PreviewCard() }
+                }
             }
         }
     }

@@ -16,7 +16,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import dev.mineport.launcher.ui.components.PageHeader
 import dev.mineport.launcher.AppContainer
 import dev.mineport.launcher.crash.CrashRecorder
 import dev.mineport.launcher.crash.DiagnosticsExporter
@@ -53,15 +53,20 @@ fun SettingsScreen(container: AppContainer) {
     var defaultBackend by remember { mutableStateOf(RenderBackend.AUTO) }
     var defaultMemory by remember { mutableFloatStateOf(profile.recommendedMemoryMB.toFloat()) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("设置") }) }) { padding ->
+    Scaffold { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            PageHeader("设置")
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             EnterFromBottom(0) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -152,6 +157,7 @@ fun SettingsScreen(container: AppContainer) {
                     }
                 }
             }
+        }
         }
     }
 }

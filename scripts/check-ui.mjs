@@ -195,6 +195,24 @@ must('空状态图标弹性入场', emptyState, /spring\(dampingRatio = 0\.62f[\
 must('动效关掉即终态', motion, /if \(!enabled\) \{[\s\S]{0,80}?snapTo\(1f\)/,
   '关掉动效后不能停在 0 透明度');
 
+// —— 顶栏压缩：四页都不用 TopAppBar，改用 44dp 的 PageHeader ——
+const pageHeader = read('app/src/main/java/dev/mineport/launcher/ui/components/PageHeader.kt');
+const settings = read('app/src/main/java/dev/mineport/launcher/ui/settings/SettingsScreen.kt');
+must('PageHeader 存在', pageHeader, /fun PageHeader\(/, '四页共用的紧凑标题行');
+must('PageHeader 用 headlineSmall', pageHeader, /style = MaterialTheme\.typography\.headlineSmall/,
+  '标题字号跟 TopAppBar 一致，只是行高更紧');
+must('PageHeader 垂直内边距 6dp', pageHeader, /top = 6\.dp[\s\S]{0,40}?bottom = 2\.dp/,
+  'UX-14：横屏一行 44dp，比 TopAppBar 的 64dp 省 20dp');
+for (const [label, src] of [['设置', settings], ['个性化', personalize], ['更多', more], ['版本', instances]]) {
+  mustNot(`${label}页不用 TopAppBar`, src, /TopAppBar\(/,
+    'TopAppBar 在横屏吃掉一整行，四页统一换成 PageHeader');
+  must(`${label}页用 PageHeader`, src, new RegExp('PageHeader\\('), '四页统一走 PageHeader');
+}
+must('设置页标题固定内容滚动', settings,
+  /PageHeader\("设置"\)[\s\S]{0,240}?weight\(1f\)[\s\S]{0,200}?verticalScroll/, '标题不跟着内容滚走');
+must('版本页标题行带返回', instances, /leading = if \(onBack == null\)/, 'onBack 为空时不显示返回');
+must('版本页导入按钮进标题行', instances, /actions = \{[\s\S]{0,200}?"导入目录"/, '三个导入入口塞进行内 actions');
+
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

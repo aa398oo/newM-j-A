@@ -29,12 +29,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import dev.mineport.launcher.ui.components.PageHeader
 import dev.mineport.launcher.AppContainer
 import dev.mineport.launcher.BuildConfig
 import dev.mineport.launcher.device.DeviceProfile
@@ -55,43 +55,49 @@ fun MoreScreen(
     onOpenInstances: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Scaffold(topBar = { TopAppBar(title = { Text("更多") }) }) { padding ->
+    Scaffold { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            EnterFromBottom(0) {
-                EntryCard {
-                    MoreRow(
-                        icon = Icons.Filled.Apps,
-                        title = "版本管理",
-                        subtitle = "导入、导出、删除本地版本",
-                        onClick = onOpenInstances
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                    MoreRow(
-                        icon = Icons.Filled.Person,
-                        title = "账号与联机",
-                        subtitle = "离线 / 微软账号、局域网世界",
-                        onClick = onOpenSettings
-                    )
+            PageHeader("更多")
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                EnterFromBottom(0) {
+                    EntryCard {
+                        MoreRow(
+                            icon = Icons.Filled.Apps,
+                            title = "版本管理",
+                            subtitle = "导入、导出、删除本地版本",
+                            onClick = onOpenInstances
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                        MoreRow(
+                            icon = Icons.Filled.Person,
+                            title = "账号与联机",
+                            subtitle = "离线 / 微软账号、局域网世界",
+                            onClick = onOpenSettings
+                        )
+                    }
                 }
-            }
-            EnterFromBottom(1) {
-                EntryCard {
-                    MoreRow(
-                        icon = Icons.Filled.BugReport,
-                        title = "诊断与日志",
-                        subtitle = "崩溃记录、启动日志、导出诊断包",
-                        onClick = onOpenSettings
-                    )
+                EnterFromBottom(1) {
+                    EntryCard {
+                        MoreRow(
+                            icon = Icons.Filled.BugReport,
+                            title = "诊断与日志",
+                            subtitle = "崩溃记录、启动日志、导出诊断包",
+                            onClick = onOpenSettings
+                        )
+                    }
                 }
+                EnterFromBottom(2) { AboutCard(container.deviceProfile) }
             }
-            EnterFromBottom(2) { AboutCard(container.deviceProfile) }
         }
     }
 }

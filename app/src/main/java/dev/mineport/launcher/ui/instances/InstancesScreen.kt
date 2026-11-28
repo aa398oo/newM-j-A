@@ -37,7 +37,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -50,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import dev.mineport.launcher.ui.components.PageHeader
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mineport.launcher.AppContainer
 import dev.mineport.launcher.MineportApplication
@@ -140,26 +140,6 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
     val fabSource = remember { MutableInteractionSource() }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("版本") },
-                navigationIcon = {
-                    // 从首页/更多页进来的子页面，给一个明确的返回；作为 tab 时（onBack=null）不显示。
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { importVersionLauncher.launch(null) }) { Text("导入目录") }
-                    TextButton(onClick = { importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }) {
-                        Text("导入 zip")
-                    }
-                    TextButton(onClick = { showImport = true }) { Text("短码导入") }
-                }
-            )
-        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showCreate = true },
@@ -170,10 +150,31 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
         ) {
+            PageHeader(
+                title = "版本",
+                leading = if (onBack == null) {
+                    null
+                } else {
+                    // 从首页/更多页进来的子页面，给一个明确的返回；作为 tab 时（onBack=null）不显示。
+                    { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") } }
+                },
+                actions = {
+                    TextButton(onClick = { importVersionLauncher.launch(null) }) { Text("导入目录") }
+                    TextButton(onClick = { importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }) {
+                        Text("导入 zip")
+                    }
+                    TextButton(onClick = { showImport = true }) { Text("短码导入") }
+                }
+            )
+            LazyColumn(
+                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             if (instances.isEmpty()) {
                 item {
                     EmptyState(
@@ -215,6 +216,7 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
                     }
                 }
             }
+        }
         }
     }
 
