@@ -1,10 +1,16 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-project(fclandroid CXX)
+project(fclandroid CXX C)
 
 add_library(fclandroid SHARED
         jni_bridge.cpp
         render_bridge.cpp)
+
+# JVM 的 libnio.so 在 DT_NEEDED 里写着 libnet.so（JDK 网络库）。这台裁剪 JRE
+# 没带它，boot layer 一解析 java.naming 就 dlopen 失败。这里编一个最小替身：
+# 只要能被 dlopen、导出 JNI_OnLoad 就够，真正的网络符号平时用不到（离线启动）。
+# 运行期由 JvmLauncher 从 nativeLibraryDir 复制到 files/runtime/lib/。
+add_library(net SHARED net_stub.c)
 
 target_compile_features(fclandroid PRIVATE cxx_std_20)
 

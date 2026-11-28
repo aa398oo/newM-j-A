@@ -107,6 +107,13 @@ object MinecraftLauncher {
 
             val args = buildArgs(chain, versionId, playerName, gameDir, assetsDir, account)
             val jvmArgs = buildJvmArgs(chain, versionId, librariesDir)
+            android.util.Log.i(
+                "MineportGame",
+                "plan: mainClass=" + mainClass + " jars=" + classPath.size +
+                    " hasBootstrap=" + classPath.any { it.name.contains("bootstraplauncher") } +
+                    " jvmArgs=" + jvmArgs.size +
+                    " opens=" + jvmArgs.filter { it.startsWith("--add-opens") }
+            )
             Result.success(LaunchPlan(mainClass, classPath, args, nativesDir, jvmArgs))
         } catch (e: Exception) {
             Result.failure(e)
@@ -261,8 +268,31 @@ object MinecraftLauncher {
         var i = 0
         while (i < substituted.size) {
             val arg = substituted[i]
-            if (arg in GLUE_OPTIONS && i + 1 < substituted.size) {
-                glued += arg + "=" + substituted[i + 1]
+            if ((arg == "-p" || arg == "--module-path") && i + 1 < substituted.size) {
+                // BootstrapLauncher 用 module path 建它自己的 layer（org.openjdk.nashorn
+                // 依赖 org.objectweb.asm.commons）。丢掉 -p 会直接 FindException。
+                // 但 --add-modules 不能传：那会让 boot layer 提前解析全部模块，
+                // 而这台裁剪 JRE 缺 libnet.so，解析到 java.naming 就 abort。
+                // 用 -D 而不是 --module-path=：JVM 创建时若带 module path 会去解析
+                // boot layer 的模块，这台裁剪 JRE 缺 libnet.so，解析到 java.naming
+                // 就 UnsatisfiedLinkError 直接 abort。而 BootstrapLauncher 只是读
+                // jdk.module.path 这个属性自己建 layer —— 属性传法正好绕开解析。
+                glued += "-Djdk.module.path=" + substituted[i + 1]
+                i += 2
+            } else if (arg in DROP_WITH_VALUE) {
+                // -p / --add-modules / --add-exports 在这台裁剪 JRE 上有害：
+                //   * module path 一进 JVM，boot layer 会去解析 java.naming 等模块，
+                //     而 runtime/lib 里没有 libnet.so → UnsatisfiedLinkError，进程直接 abort；
+                //   * --add-modules ALL-MODULE-PATH 同理。
+                // BootstrapLauncher 自己用 -DlibraryDirectory 建 layer，不需要 JVM 的 module path。
+                i += 2
+            } else if (arg == "--add-opens" && i + 1 < substituted.size) {
+                // Forge 的 target 是 cpw.mods.securejarhandler（运行期才定义的模块），
+                // JVM 启动时它还不存在，这条会被静默忽略。调用方其实是 unnamed module，
+                // 所以把 target 换成 ALL-UNNAMED 才有用；同时改成 HotSpot 认的等号形式。
+                val value = substituted[i + 1]
+                val head = value.substringBeforeLast('=', value)
+                glued += "--add-opens=" + head + "=ALL-UNNAMED"
                 i += 2
             } else {
                 glued += arg
@@ -272,11 +302,8 @@ object MinecraftLauncher {
         return glued
     }
 
-    /** 这些选项在 java launcher 里是「选项 + 值」两个 token，HotSpot 只认 `--opt=value`。 */
-    private val GLUE_OPTIONS = setOf(
-        "--add-opens", "--add-exports", "--add-modules", "--add-reads",
-        "--patch-module", "--limit-modules", "--module-path", "--add-exports",
-    )
+    /** 这些选项要连同它的值一起丢掉（见上面 buildJvmArgs 里的注释）。 */
+    private val DROP_WITH_VALUE = setOf("--add-modules", "--add-exports")
 
     private fun rulesAllow(rules: JsonElement?): Boolean {
         if (rules !is JsonArray || rules.isEmpty()) return true

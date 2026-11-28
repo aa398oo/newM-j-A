@@ -220,7 +220,8 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
                             )
                         }
                         IconButton(onClick = { context.startActivity(GameActivity.intent(context, instance.id)) }) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = "启动")
+                            // 无障碍 + 自动化都要能区分「启动哪一个」：多了名字，uiautomator 就能按名字点。
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "启动 " + instance.name)
                         }
                         IconButton(onClick = { pendingDelete = instance }) {
                             Icon(Icons.Filled.Delete, contentDescription = "删除")

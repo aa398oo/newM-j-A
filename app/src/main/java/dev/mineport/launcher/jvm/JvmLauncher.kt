@@ -122,6 +122,29 @@ object JvmLauncher {
     fun resolveLibjvm(context: Context, runtimeRoot: File): File? =
         findLibjvm(runtimeRoot, context.applicationInfo.nativeLibraryDir?.let(::File))
 
+    /**
+     * libnet.so 替身。只在缺失时复制，已有的（将来换成完整 JRE）不动。
+     * 返回 true 表示补上了或本来就有。
+     */
+    private fun installNetStub(context: Context, runtimeRoot: File): Boolean {
+        val target = File(runtimeRoot, "lib/libnet.so")
+        if (target.isFile && target.length() > 0L) return true
+        val src = File(context.applicationInfo.nativeLibraryDir ?: return false, "libnet.so")
+        if (!src.isFile) {
+            Log.w("MineportJVM", "libnet.so 替身没有打进 APK：" + src.absolutePath)
+            return false
+        }
+        return runCatching {
+            target.parentFile?.mkdirs()
+            src.copyTo(target, overwrite = true)
+            Log.i("MineportJVM", "libnet.so 替身已补：" + target.absolutePath + " (" + target.length() + " 字节)")
+            true
+        }.getOrElse {
+            Log.w("MineportJVM", "补 libnet.so 失败", it)
+            false
+        }
+    }
+
     fun start(context: Context, spec: JvmLaunchSpec): JvmStartResult {
         // 进程内 JVM 只创建一次：返回桌面后再次进游戏时，直接复用并回报同一个版本。
         val existing = nativeRuntimeVersion()
@@ -129,6 +152,11 @@ object JvmLauncher {
             Log.i("MineportJVM", "复用已存在的 JVM, java.version=" + existing)
             return JvmStartResult.Ready(existing)
         }
+
+        // JDK 的 libnio.so 在 DT_NEEDED 里写着 libnet.so，这台裁剪 JRE 没带。
+        // boot layer 一解析 java.naming 就会 dlopen 它，失败即进程 abort。
+        // 这里把 APK 里的最小替身（app/src/main/cpp/net_stub.c）补进 runtime/lib。
+        installNetStub(context, spec.runtimeRoot)
 
         val libjvm = resolveLibjvm(context, spec.runtimeRoot)
             ?: return JvmStartResult.Failed(
