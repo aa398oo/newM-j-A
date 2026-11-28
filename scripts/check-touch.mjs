@@ -105,6 +105,49 @@ must('反射兜底保留', jni, /ensureMcInput\(/, '仍保留 ensureMcInput 反�
 // 观测：touch.log 落在 filesDir（run-as 可读）。
 must('touch.log 可读路径', host, /filesDir,\s*"touch\.log"/, 'trace 写 files/touch.log');
 
+// ── UX-21 局内按键：收起/展开、死区、鼠标键通道 ────────────────────────────
+const pad = read('app/src/main/java/dev/mineport/launcher/input/ActionPad.kt');
+add('UX-21 收起画小球 / 展开画轮盘',
+  /if \(actionPad\.expanded\)[\s\S]{0,200}?ActionWheel\(/.test(codeOnly(activity))
+  && /ActionPadOverlay\(/.test(codeOnly(activity)),
+  'GameActivity 按 actionPad.expanded 在 ActionWheel / ActionPadOverlay 间切换');
+add('UX-21 收起态小球命中 56dp',
+  /ballHitPx[\s\S]{0,60}?28f \* density/.test(codeOnly(host)),
+  '收起态只让 28dp 半径（56dp 直径）吃触摸，其余交给摇杆/游戏');
+add('UX-21 中心死区 32dp 绝对值',
+  /centerPx[\s\S]{0,60}?32f \* density/.test(codeOnly(host)),
+  '中心死区与收起热区都用 32dp 绝对值，不用半径比例');
+add('UX-21 不再写死 24f 内径',
+  !/innerPx\s*=\s*24f/.test(codeOnly(host)),
+  'innerPx 由 centerPx（dp 换算）传入，不再写裸像素');
+add('UX-21 点球只展开不双切换',
+  /private fun claimWheel\([\s\S]{0,900}?pad\.expand\(\)[\s\S]{0,160}?return true/.test(codeOnly(host)),
+  'claimWheel 展开后立刻 return，不再落到「点中心收起」分支');
+add('UX-21 收起态不参与扇区命中',
+  /!pad\.expanded\)\s*return -1/.test(codeOnly(host)),
+  'pickWheelIndex 在收起态返回 -1');
+add('UX-21 收起前先松键',
+  /fun collapse\(\)\s*\{\s*up\(\)/.test(codeOnly(pad)),
+  'ActionPad.collapse() 先 up()，避免收起来时按键卡在按下态');
+add('UX-21 手指搭在轮盘上不自动收起',
+  /pointersDown\s*>\s*0/.test(codeOnly(pad)),
+  'autoCollapseIfIdle 检查 pointersDown，4 秒内有手指就保持展开');
+
+must('UX-21 鼠标键 JNI 入口', jni,
+  /Java_dev_mineport_launcher_game_NativeRenderer_nativeSendMouseButton/,
+  'jni_bridge.cpp 导出 nativeSendMouseButton');
+must('UX-21 鼠标键走 critical_send_mouse_button', jni,
+  /g_criticalMouseButton\(button,\s*action == 0 \? 0 : 1, 0\)/,
+  'nativeSendMouseButton 调 critical_send_mouse_button');
+must('UX-21 NativeRenderer 声明鼠标键', renderer,
+  /external fun nativeSendMouseButton\(button: Int, action: Int\)/,
+  'Kotlin 侧 external fun nativeSendMouseButton');
+add('UX-21 攻/副两槽接通 native',
+  (codeOnly(activity).match(/nativeSendMouseButton\(/g) ?? []).length >= 4,
+  '按下/松开各两处（左键+右键）');
+add('UX-21 鼠标键不再只记日志', !/鼠标键暂未接通/.test(activity),
+  'GameActivity 不再对 MOUSE_* 只 Log.w');
+
 const failed = checks.filter((c) => !c.ok);
 for (const c of checks) {
   console.log((c.ok ? '  OK   ' : ' FAIL  ') + c.name + '  —  ' + c.detail);

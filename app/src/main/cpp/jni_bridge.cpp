@@ -1528,6 +1528,26 @@ Java_dev_mineport_launcher_game_NativeRenderer_nativeSendKey(
     g_criticalKey(key, 0, action == 0 ? 0 : 1, 0);
 }
 
+/**
+ * 鼠标按键输入（动作轮盘的「攻击/使用」两槽）。
+ *
+ * 走和键盘同一条 critical_send_mouse_button：button 用 GLFW 口径（0=左键、1=右键），
+ * action 延续本工程 0=抬起、1=按下（与 nativeSendKey 一致，不直接暴露 GLFW 的 1/0）。
+ *
+ * 注意：这里**只发按键，不动光标**。MC 的攻击射线取的是当前光标所在的屏幕中心
+ * （游戏内光标被锁定在窗口中心），触摸视角由 nativeSendPointer 负责挪动它。
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_dev_mineport_launcher_game_NativeRenderer_nativeSendMouseButton(
+        JNIEnv*, jclass, jint button, jint action) {
+    LOGI("mouse: button=%d action=%d", button, action);
+    if (!resolveCriticalInput() || g_criticalMouseButton == nullptr) {
+        LOGE("mouse: critical_send_mouse_button unavailable");
+        return;
+    }
+    g_criticalMouseButton(button, action == 0 ? 0 : 1, 0);
+}
+
 /** 复位输入状态（CANCEL/系统手势后调用，避免按键停在按下态）。 */
 extern "C" JNIEXPORT void JNICALL
 Java_dev_mineport_launcher_game_NativeRenderer_nativeResetInputState(JNIEnv*, jclass) {

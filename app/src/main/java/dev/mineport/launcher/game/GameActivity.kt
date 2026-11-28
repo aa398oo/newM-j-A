@@ -28,6 +28,7 @@ import dev.mineport.launcher.jvm.StartupTrace
 import dev.mineport.launcher.performance.PerfSampler
 import dev.mineport.launcher.render.ShaderOutcome
 import dev.mineport.launcher.render.ShaderPolicy
+import dev.mineport.launcher.ui.game.ActionPadOverlay
 import dev.mineport.launcher.ui.theme.MineportTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,21 +77,27 @@ class GameActivity : ComponentActivity() {
      * 轮盘动作下发。
      *
      * KEY 走 `nativeSendKey`（critical_send_key）；
-     * 鼠标左右键暂时没有独立的 native 入口（`nativeSendPointer` 会顺带移动光标），
-     * 所以先只记日志，等 C++ 侧补 `nativeSendMouseButton` 再接上。
+     * MOUSE_LEFT/ MOUSE_RIGHT 走 `nativeSendMouseButton`（critical_send_mouse_button，
+     * 只发按键不动光标——光标已经被视角触摸挪到该在的位置）。
      */
     private fun handleWheel(slot: ActionSlot, down: Boolean) {
         if (down) {
             if (!heldWheel.add(slot)) return
             when (slot.type) {
                 ActionType.KEY -> NativeRenderer.nativeSendKey(slot.code, NativeRenderer.KEY_PRESS)
-                else -> Log.w(TAG, "wheel: 鼠标键暂未接通 -> " + slot.label)
+                ActionType.MOUSE_LEFT ->
+                    NativeRenderer.nativeSendMouseButton(NativeRenderer.MOUSE_LEFT, NativeRenderer.KEY_PRESS)
+                ActionType.MOUSE_RIGHT ->
+                    NativeRenderer.nativeSendMouseButton(NativeRenderer.MOUSE_RIGHT, NativeRenderer.KEY_PRESS)
             }
             Log.i(TAG, "wheel press " + slot.label)
         } else if (heldWheel.remove(slot)) {
             when (slot.type) {
                 ActionType.KEY -> NativeRenderer.nativeSendKey(slot.code, NativeRenderer.KEY_RELEASE)
-                else -> Unit
+                ActionType.MOUSE_LEFT ->
+                    NativeRenderer.nativeSendMouseButton(NativeRenderer.MOUSE_LEFT, NativeRenderer.KEY_RELEASE)
+                ActionType.MOUSE_RIGHT ->
+                    NativeRenderer.nativeSendMouseButton(NativeRenderer.MOUSE_RIGHT, NativeRenderer.KEY_RELEASE)
             }
             Log.i(TAG, "wheel release " + slot.label)
         }
@@ -131,14 +138,32 @@ class GameActivity : ComponentActivity() {
             )
         )
 
+        // 动作轮盘逻辑：默认 8 槽；命中由 host 按 pointer 计算（带角度滞回），
+        // 按下/抬起经 handleWheel 转到 nativeSendKey / nativeSendMouseButton。
+        // 必须在绘制层之前建好——收起态/展开态画哪个由 actionPad.expanded 决定。
+        val actionPad = dev.mineport.launcher.input.ActionPad(
+            dev.mineport.launcher.input.ActionPad.defaultSlots(),
+        ) { slot, down -> handleWheel(slot, down) }
+        host.actionPad = actionPad
+
         // 左下角动作轮盘：纯展示层，触摸命中由 host 按 pointer 手动判定（见 GameHostLayout），
         // 这样「一根手指转视角、另一根手指按轮盘」能同时成立。
+        // 展开画 8 槽轮盘、收起画 48dp 小球——两者共用一个 220dp 外框，外框不随状态移动，
+        // 所以 host 的圆心计算（wheelView 的 left/top/width）在两种状态下都成立。
         val density = resources.displayMetrics.density
         val wheelSize = (220 * density).toInt()
         val wheel = ComposeView(this).apply {
             setContent {
                 MineportTheme {
-                    ActionWheel(active = wheelActive)
+                    if (actionPad.expanded) {
+                        ActionWheel(active = wheelActive, actions = actionPad.slots)
+                    } else {
+                        ActionPadOverlay(
+                            pad = actionPad,
+                            centerX = wheelSize / 2f,
+                            centerY = wheelSize / 2f,
+                        )
+                    }
                 }
             }
         }
@@ -165,14 +190,7 @@ class GameActivity : ComponentActivity() {
         }
         host.movePad = movePad
 
-        // 动作轮盘逻辑：默认 8 槽；命中由 host 按 pointer 计算（带角度滞回），
-        // 按下/抬起经 handleWheel 转到 nativeSendKey。后续接 Prefs 后可改绑。
-        val actionPad = dev.mineport.launcher.input.ActionPad(
-            dev.mineport.launcher.input.ActionPad.defaultSlots(),
-        ) { slot, down -> handleWheel(slot, down) }
-        host.actionPad = actionPad
-
-        // 4 秒无操作自动收起（按住槽位时不收，见 ActionPad.autoCollapseIfIdle）。
+        // 4 秒无操作自动收起（按住槽位/手指还搭在轮盘上时不收，见 ActionPad.autoCollapseIfIdle）。
         val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
         val idleTick = object : Runnable {
             override fun run() {

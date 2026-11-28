@@ -35,7 +35,8 @@ data class ActionSlot(
  * 这里不持有计时器——保持纯函数式，方便测试。
  */
 class ActionPad(
-    private val slots: List<ActionSlot>,
+    /** 8 个槽位。编辑模式改绑后整体替换，绘制与命中都读这里，保证「改完立刻生效」。 */
+    val slots: List<ActionSlot>,
     private val onSlot: (slot: ActionSlot, pressed: Boolean) -> Unit,
 ) {
     /** 是否展开成 8 槽轮盘。 */
@@ -65,15 +66,31 @@ class ActionPad(
     /** 最近一次触摸轮盘的时间（uptimeMillis）。用于「4 秒无操作自动收起」。 */
     private var lastTouchAt = 0L
 
+    /** 当前有几根手指按在轮盘上（宿主记账）。>0 时禁止自动收起。 */
+    private var pointersDown = 0
+
     /** 记录一次触摸；由宿主在 WHEEL 指针的 DOWN/MOVE 时调用。 */
     fun markTouch() {
         lastTouchAt = android.os.SystemClock.uptimeMillis()
     }
 
+    /** 宿主把一根手指判给轮盘时调用（含收起态点球展开那一指）。 */
+    fun pointerDown() {
+        pointersDown++
+        markTouch()
+    }
+
+    /** 与 [pointerDown] 配对；宿主漏调也不会让计数变负。 */
+    fun pointerUp() {
+        if (pointersDown > 0) pointersDown--
+        markTouch()
+    }
+
     /**
      * 空闲超过 [timeoutMs] 就自动收起成小球。
      *
-     * 只在**展开且没有按住任何槽**时收——否则会出现「按着攻击键突然缩成球」的诡异手感。
+     * 只在**展开、非编辑态、没有按住任何槽、也没有手指搭在轮盘上**时收——
+     * 否则会出现「按着攻击键突然缩成球」或者「手指还按着就被收走」的诡异手感。
      * @return 是否真的收起了
      */
     fun autoCollapseIfIdle(
@@ -81,7 +98,9 @@ class ActionPad(
         now: Long = android.os.SystemClock.uptimeMillis(),
     ): Boolean {
         if (!expanded) return false
+        if (mode != PadMode.PLAY) return false
         if (activeSlot != null) return false
+        if (pointersDown > 0) return false
         if (now - lastTouchAt < timeoutMs) return false
         collapse()
         return true
@@ -93,9 +112,14 @@ class ActionPad(
 
     fun expand() {
         expanded = true
+        markTouch()
     }
 
+    /**
+     * 收起成小球。**先松开正在按的槽**：否则「按着攻击键时自动收起」会把鼠标左键卡在按下态。
+     */
     fun collapse() {
+        up()
         expanded = false
     }
 

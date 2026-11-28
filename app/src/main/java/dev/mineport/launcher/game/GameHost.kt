@@ -46,7 +46,21 @@ class GameHostLayout @JvmOverloads constructor(
     /** pointerId -> 当前扇区下标（-1 表示圆内但太靠近中心，无动作） */
     private val wheelIndex = SparseIntArray()
 
-    private val actions: List<ActionSlot> = ActionPad.defaultSlots()
+    /** 8 个槽位跟着 [actionPad] 走（编辑模式改绑后立刻生效），没注入时用默认绑定。 */
+    private fun slotAt(i: Int): ActionSlot? = (actionPad?.slots ?: defaultSlots).getOrNull(i)
+
+    /** 没注入 actionPad 时的兜底绑定：只在极早期（宿主还没 setContent）用得到。 */
+    private val defaultSlots: List<ActionSlot> by lazy(LazyThreadSafetyMode.NONE) {
+        ActionPad.defaultSlots()
+    }
+
+    private val density: Float get() = resources.displayMetrics.density
+
+    /** 收起态小球命中半径：视觉 24dp，命中放宽到 28dp（56dp 直径，游戏场景够大又不吃环带）。 */
+    private val ballHitPx: Float get() = 28f * density
+
+    /** 展开态中心死区 = 点中心收起的热区，32dp（绝对值，不用比例——豆包 UX-21 要求）。 */
+    private val centerPx: Float get() = 32f * density
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
@@ -55,38 +69,8 @@ class GameHostLayout @JvmOverloads constructor(
                 val id = ev.getPointerId(i)
                 val x = ev.getX(i)
                 val y = ev.getY(i)
-                // 收起态：先判定是否点在小球（48dp 半径内）——点球展开，这一指不参与游戏。
-                val pad = actionPad
-                if (pad != null && !pad.expanded) {
-                    val w = wheelView
-                    if (w != null && w.width > 0) {
-                        val cx = w.left + w.width / 2f
-                        val cy = w.top + w.height / 2f
-                        val ball = 24f * resources.displayMetrics.density
-                        if (hypot(x - cx, y - cy) <= ball) {
-                            pad.expand()
-                        }
-                    }
-                }
-                // 展开态：点中心圆（24dp 内）收起成小球。
-                if (pad != null && pad.expanded) {
-                    val w = wheelView
-                    if (w != null && w.width > 0) {
-                        val cx = w.left + w.width / 2f
-                        val cy = w.top + w.height / 2f
-                        val ball = 24f * resources.displayMetrics.density
-                        if (hypot(x - cx, y - cy) <= ball) {
-                            pad.collapse()
-                        }
-                    }
-                }
-                val idx = pickWheelIndex(x, y, id)
-                if (idx >= 0 || inWheelCircle(x, y)) {
-                    // 记录一次触摸，让「4 秒无操作自动收起」不会在刚点完就缩回去
-                    pad?.markTouch()
-                    owners.put(id, OWNER_WHEEL)
-                    wheelIndex.put(id, idx)
-                    if (idx >= 0) onWheelAction?.invoke(actions[idx], true)
+                if (claimWheel(id, x, y)) {
+                    // 归轮盘/小球，这一指不参与游戏输入
                 } else if (x < width / 2f && movePad != null) {
                     // 左半屏 = 移动摇杆（浮动：按在哪，基座就出现在哪）
                     owners.put(id, OWNER_MOVE_PAD)
@@ -104,12 +88,17 @@ class GameHostLayout @JvmOverloads constructor(
                     val y = ev.getY(i)
                     when (owners.get(id, OWNER_GAME)) {
                         OWNER_WHEEL -> {
-                            val idx = pickWheelIndex(x, y)
-                            val old = wheelIndex.get(id, -1)
-                            if (idx != old) {
-                                if (old >= 0) onWheelAction?.invoke(actions[old], false)
-                                if (idx >= 0) onWheelAction?.invoke(actions[idx], true)
-                                wheelIndex.put(id, idx)
+                            val pad = actionPad
+                            // 收起态下的残留手指不参与扇区判定（收起 = 这一指作废）。
+                            if (pad == null || pad.expanded) {
+                                pad?.markTouch()
+                                val idx = pickWheelIndex(x, y, id)
+                                val old = wheelIndex.get(id, -1)
+                                if (idx != old) {
+                                    if (old >= 0) slotAt(old)?.let { onWheelAction?.invoke(it, false) }
+                                    if (idx >= 0) slotAt(idx)?.let { onWheelAction?.invoke(it, true) }
+                                    wheelIndex.put(id, idx)
+                                }
                             }
                         }
                         OWNER_MOVE_PAD -> movePad?.move(x, y)
@@ -121,26 +110,19 @@ class GameHostLayout @JvmOverloads constructor(
             MotionEvent.ACTION_POINTER_UP -> {
                 val i = ev.actionIndex
                 val id = ev.getPointerId(i)
-                if (owners.get(id, OWNER_GAME) == OWNER_MOVE_PAD) movePad?.up()
-                releaseWheelPointer(id)
-                injector.pointerUp(id)
-                owners.delete(id)
+                endPointer(id)
             }
 
             MotionEvent.ACTION_UP -> {
-                val id = ev.getPointerId(0)
-                if (owners.get(id, OWNER_GAME) == OWNER_MOVE_PAD) movePad?.up()
-                releaseWheelPointer(id)
-                injector.pointerUp(id)
+                // ACTION_UP 时只剩最后一根，但仍按 pointerCount 收尾，避免漏账。
+                for (i in 0 until ev.pointerCount) endPointer(ev.getPointerId(i))
                 owners.clear()
                 wheelIndex.clear()
             }
 
             MotionEvent.ACTION_CANCEL -> {
-                for (i in 0 until wheelIndex.size()) {
-                    val idx = wheelIndex.valueAt(i)
-                    if (idx >= 0) onWheelAction?.invoke(actions[idx], false)
-                }
+                // 每根手指按自己的 owner 收尾（松槽位/松摇杆），再统一复位 FCL 输入态。
+                for (i in 0 until ev.pointerCount) endPointer(ev.getPointerId(i))
                 wheelIndex.clear()
                 owners.clear()
                 movePad?.up()
@@ -153,51 +135,106 @@ class GameHostLayout @JvmOverloads constructor(
     /** 子 View 一律不参与触摸竞争：所有事件都由本容器按 pointer 分发。 */
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean = true
 
+    /**
+     * DOWN：判定这一指是否归轮盘，归则记账并返回 true。
+     *
+     * 三条互斥分支（顺序不能换，否则小球会「展开完立刻收起」）：
+     * 1. 收起态且落在小球 56dp 命中圈内 -> 展开，这一指不触发任何动作；
+     * 2. 展开态且落在中心 32dp 死区内 -> 收起（collapse 内部先 up 掉按住的槽）；
+     * 3. 展开态且落在环带内（≤1.15R）-> 命中扇区并按下。
+     */
+    private fun claimWheel(id: Int, x: Float, y: Float): Boolean {
+        val pad = actionPad ?: return false
+        val geo = wheelGeometry() ?: return false
+        val dist = hypot(x - geo.cx, y - geo.cy)
+        if (!pad.expanded) {
+            if (dist > ballHitPx) return false
+            pad.expand()
+            pad.markTouch()
+            owners.put(id, OWNER_WHEEL)
+            wheelIndex.put(id, -1)
+            return true
+        }
+        if (dist <= centerPx) {
+            pad.collapse()
+            pad.markTouch()
+            owners.put(id, OWNER_WHEEL)
+            wheelIndex.put(id, -1)
+            return true
+        }
+        if (dist > geo.r * ActionPad.OUTER_RATIO) return false
+        pad.markTouch()
+        val idx = pad.hit(geo.cx, geo.cy, x, y, geo.r, innerPx = centerPx, lastIndex = -1)
+        owners.put(id, OWNER_WHEEL)
+        wheelIndex.put(id, idx)
+        if (idx >= 0) slotAt(idx)?.let { onWheelAction?.invoke(it, true) }
+        return true
+    }
+
+    /** 单指收尾：松摇杆 / 松轮盘槽位 / 松注入的鼠标键，都只做自己那一份。 */
+    private fun endPointer(id: Int) {
+        when (owners.get(id, OWNER_GAME)) {
+            OWNER_MOVE_PAD -> movePad?.up()
+            OWNER_WHEEL -> {
+                releaseWheelPointer(id)
+                actionPad?.pointerUp()
+            }
+            else -> injector.pointerUp(id)
+        }
+        owners.delete(id)
+    }
+
     private fun releaseWheelPointer(id: Int) {
         if (owners.get(id, OWNER_GAME) != OWNER_WHEEL) return
         val idx = wheelIndex.get(id, -1)
-        if (idx >= 0) onWheelAction?.invoke(actions[idx], false)
+        if (idx >= 0) slotAt(idx)?.let { onWheelAction?.invoke(it, false) }
         wheelIndex.delete(id)
     }
 
-    /** 触摸点是否落在轮盘可视圆内（含中心死区，用于把「按在轮盘上」判给轮盘）。 */
+    /** 轮盘圆心的屏幕坐标与可视半径；wheelView 还没测量出来时返回 null。 */
+    private fun wheelGeometry(): WheelGeo? {
+        val w = wheelView ?: return null
+        if (w.width == 0 || w.height == 0) return null
+        return WheelGeo(
+            w.left + w.width / 2f,
+            w.top + w.height / 2f,
+            minOf(w.width, w.height) * WHEEL_RADIUS_RATIO
+        )
+    }
+
+    /** 触摸点是否落在轮盘环带内（含中心死区，用于把「按在轮盘上」判给轮盘）。 */
     private fun inWheelCircle(x: Float, y: Float): Boolean {
+        val geo = wheelGeometry() ?: return false
+        if (hypot(x - geo.cx, y - geo.cy) > geo.r * ActionPad.OUTER_RATIO) return false
         val w = wheelView ?: return false
-        if (w.width == 0 || w.height == 0) return false
-        if (x < w.left || x > w.right || y < w.top || y > w.bottom) return false
-        val dx = x - (w.left + w.width / 2f)
-        val dy = y - (w.top + w.height / 2f)
-        val outer = minOf(w.width, w.height) * 0.42f * 1.18f
-        return hypot(dx, dy) <= outer
+        return x >= w.left && x <= w.right && y >= w.top && y <= w.bottom
     }
 
     /**
      * 命中扇区；返回 -1 表示在圆内但没选中（中心死区或超出扇区半径）。
      *
      * 注入了 [actionPad] 时走它的 `hit()` —— 那套算法带**角度滞回**（[id] 用来取上一次槽位），
-     * 手指停在扇区交界不会闪跳。没注入时退回旧的纯几何算法。
+     * 手指停在扇区交界不会闪跳。未展开时不接受命中。没注入时退回旧的纯几何算法。
      */
     private fun pickWheelIndex(x: Float, y: Float, id: Int = -1): Int {
-        val w = wheelView ?: return -1
-        if (w.width == 0 || w.height == 0) return -1
-        val cx = w.left + w.width / 2f
-        val cy = w.top + w.height / 2f
+        val geo = wheelGeometry() ?: return -1
         val pad = actionPad
         if (pad != null) {
-            val r = minOf(w.width, w.height) * 0.5f
+            if (!pad.expanded) return -1
             val last = if (id >= 0) wheelIndex.get(id, -1) else -1
-            return pad.hit(cx, cy, x, y, r, innerPx = 24f, lastIndex = last)
+            return pad.hit(geo.cx, geo.cy, x, y, geo.r, innerPx = centerPx, lastIndex = last)
         }
         if (!inWheelCircle(x, y)) return -1
-        val dx = x - cx
-        val dy = y - cy
+        val dx = x - geo.cx
+        val dy = y - geo.cy
         val dist = hypot(dx, dy)
-        if (dist < 24f) return -1
+        if (dist < centerPx) return -1
         var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
         if (angle < 0f) angle += 360f
-        val step = 360f / actions.size
+        val slots = defaultSlots
+        val step = 360f / slots.size
         return (((angle + 90f + step / 2f) % 360f) / step).toInt()
-            .coerceIn(0, actions.size - 1)
+            .coerceIn(0, slots.size - 1)
     }
 
     /** 触摸轨迹落盘：真机验证时 adb 直接 cat files/touch.log 就能确认事件是否到达。 */
@@ -207,12 +244,18 @@ class GameHostLayout @JvmOverloads constructor(
         }
     }
 
+    /** 轮盘圆心与半径（px）。 */
+    private class WheelGeo(val cx: Float, val cy: Float, val r: Float)
+
     private companion object {
         const val OWNER_GAME = 0
         const val OWNER_WHEEL = 1
 
         /** 左半屏浮动摇杆（UX-21）。 */
         const val OWNER_MOVE_PAD = 2
+
+        /** 轮盘可视半径占外框短边的比例（和 ActionWheel / ActionPadOverlay 保持一致）。 */
+        const val WHEEL_RADIUS_RATIO = 0.42f
     }
 }
 
