@@ -40,9 +40,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -69,6 +72,7 @@ import dev.mineport.launcher.ui.motion.LocalAnimationsEnabled
 import dev.mineport.launcher.ui.motion.Motion
 import dev.mineport.launcher.ui.motion.MotionIntent
 import dev.mineport.launcher.ui.motion.MotionStage
+import dev.mineport.launcher.ui.motion.PropOverlay
 import dev.mineport.launcher.ui.personalize.PersonalizeScreen
 import dev.mineport.launcher.ui.settings.SettingsScreen
 import dev.mineport.launcher.ui.theme.MonoFontFamily
@@ -117,11 +121,16 @@ fun RootScreen() {
         }
     }
 
+    // 方块在窗口里的中心；T3 的道具从屏幕右侧飞到它身上。
+    var blockCenter by remember { mutableStateOf(Offset.Zero) }
+
+    Box(Modifier.fillMaxSize()) {
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         NavRail(
             currentRoute = currentRoute,
             onNavigate = ::navigateTab,
-            stage = stage
+            stage = stage,
+            onBlockCenter = { blockCenter = it }
         )
         // rail 与内容区之间 1dp 分隔线；比给 rail 加边框省一层绘制。
         Box(
@@ -196,10 +205,22 @@ fun RootScreen() {
             }
         }
     }
+        // 道具层盖在整个外壳之上（含 rail），但不拦触摸。
+        PropOverlay(
+            stage = stage,
+            accent = MaterialTheme.colorScheme.primary,
+            blockCenter = blockCenter
+        )
+    }
 }
 
 @Composable
-private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit, stage: MotionStage) {
+private fun NavRail(
+    currentRoute: String?,
+    onNavigate: (String) -> Unit,
+    stage: MotionStage,
+    onBlockCenter: (Offset) -> Unit
+) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     // 拖 48dp 才到满量程：太小会让正常点击被识别成拖拽（rail 每项才 52dp 高）。
@@ -252,9 +273,12 @@ private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit, stage: 
                     selected = selected,
                     onClick = {
                         onNavigate(tab.route)
-                        // 导航不是「换页」而是「方块被撞一下」：T2 起方块会真的被推下去，
-                        // 现在先把事件通路接上，点哪一项都能看到撞击回弹。
-                        stage.play(MotionIntent.TabImpact)
+                        // 每个 tab 有自己的道具：下载=箭头、设置=齿轮、其余=撞一下。
+                        when (tab.route) {
+                            "downloads" -> stage.play(MotionIntent.DownloadImpact)
+                            "settings" -> stage.play(MotionIntent.SettingsImpact)
+                            else -> stage.play(MotionIntent.TabImpact)
+                        }
                     }
                 )
             }
@@ -265,7 +289,8 @@ private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit, stage: 
         CommandBlock(
             stage = stage,
             accent = cs.primary,
-            modifier = Modifier.size(42.dp)
+            modifier = Modifier.size(42.dp),
+            onCenter = onBlockCenter
         )
         Spacer(Modifier.height(2.dp))
         Text(

@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 
 /**
@@ -25,10 +27,14 @@ import androidx.compose.ui.unit.dp
 fun CommandBlock(
     stage: MotionStage,
     accent: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCenter: ((Offset) -> Unit)? = null
 ) {
     Canvas(
-        modifier = modifier.graphicsLayer {
+        modifier = modifier
+            // T3：道具要从屏幕右侧飞到方块上，overlay 必须知道方块在窗口里的位置。
+            .onGloballyPositioned { coords -> onCenter?.invoke(coords.boundsInRoot().center) }
+            .graphicsLayer {
             // 碎裂时整体缩小 + 淡出；T5 接粒子后这里只留体积变化。
             val shrink = 1f - 0.35f * stage.shatter.value
             val s = stage.blockScale.value * shrink

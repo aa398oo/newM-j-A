@@ -1,6 +1,7 @@
 package dev.mineport.launcher.ui.motion
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.keyframes
@@ -25,12 +26,21 @@ enum class MotionIntent {
     /** 点 rail 某一项：方块被撞一下，然后回弹。 */
     TabImpact,
 
+    /** 进下载页：巨型箭头从右侧冲进来撞方块（T3）。 */
+    DownloadImpact,
+
+    /** 进设置页：齿轮从右上飞过来扣合（T3）。 */
+    SettingsImpact,
+
     /** 子目录进入：方块碎裂（T5 才接粒子，T1 只有缩小淡出）。 */
     Shatter,
 
     /** Fabric 丝带唤醒材质（T6 接丝带，T1 只有颜色过渡）。 */
     Awaken
 }
+
+/** T3 的道具。绘制在 [dev.mineport.launcher.ui.motion.PropOverlay] 里。 */
+enum class MotionProp { None, Arrow, Gear }
 
 /** 当前的逻辑阶段。只用于内容切换 / 测试 / a11y，不驱动动画值。 */
 enum class MotionStageState { Idle, Impacted, Shattering }
@@ -77,6 +87,10 @@ class MotionStage(
 
     // L4 碎裂层
     val shatter = Animatable(0f)         // 0=完整 1=完全碎裂
+
+    /** 当前正在飞的道具；None 时 overlay 不绘制任何东西。 */
+    var prop by mutableStateOf(MotionProp.None)
+        private set
 
     var stage by mutableStateOf(MotionStageState.Idle)
         private set
@@ -128,9 +142,57 @@ class MotionStage(
     private suspend fun dispatch(intent: MotionIntent) {
         when (intent) {
             MotionIntent.TabImpact -> impact()
+            MotionIntent.DownloadImpact -> propHit(MotionProp.Arrow)
+            MotionIntent.SettingsImpact -> propHit(MotionProp.Gear)
             MotionIntent.Shatter -> shatterBlock()
             MotionIntent.Awaken -> awaken()
         }
+    }
+
+    /**
+     * T3 道具撞击：道具从右侧冲入 → 撞上方块 → 被弹开。
+     *
+     * 冲入用 `CubicBezierEasing(0.1, 0.9, 0.2, 1)`：前 60% 走完 90% 距离，
+     * 剩下 40% 慢慢贴上去——力量感来自「快到撞上时反而减速」，而不是匀速。
+     */
+    private suspend fun propHit(kind: MotionProp) {
+        stage = MotionStageState.Impacted
+        prop = kind
+        if (reduceMotion) {
+            propProgress.snapTo(0f)
+            propRecoil.snapTo(0f)
+            prop = MotionProp.None
+            stage = MotionStageState.Idle
+            return
+        }
+        propProgress.snapTo(0f)
+        propRecoil.snapTo(0f)
+        propProgress.animateTo(1f, tween(130, easing = CubicBezierEasing(0.1f, 0.9f, 0.2f, 1f)))
+        coroutineScope {
+            launch { blockScale.animateTo(0.94f, tween(70, easing = Motion.Ease)) }
+            launch { blockRotate.animateTo(-3f, tween(70, easing = Motion.Ease)) }
+            launch {
+                flash.animateTo(
+                    targetValue = 0f,
+                    animationSpec = keyframes {
+                        durationMillis = 220
+                        0f at 0 using LinearEasing
+                        1f at 60 using LinearEasing
+                        1f at 110 using LinearEasing
+                        0f at 220 using LinearEasing
+                    }
+                )
+            }
+            launch { propRecoil.animateTo(1f, tween(90, easing = Motion.Ease)) }
+        }
+        coroutineScope {
+            launch { blockScale.animateTo(1f, spring(dampingRatio = 0.30f, stiffness = 1100f)) }
+            launch { blockRotate.animateTo(0f, spring(dampingRatio = 0.45f, stiffness = 900f)) }
+            launch { propRecoil.animateTo(0f, spring(dampingRatio = 0.45f, stiffness = 700f)) }
+        }
+        propProgress.snapTo(0f)
+        prop = MotionProp.None
+        stage = MotionStageState.Idle
     }
 
     /**

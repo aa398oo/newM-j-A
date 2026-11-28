@@ -243,6 +243,7 @@ must('换关键词重置列表', contentTab, /hits = emptyList\(\)[\s\S]{0,400}?
 const themePack = read('app/src/main/java/dev/mineport/launcher/ui/theme/ThemePack.kt');
 const motionStage = read('app/src/main/java/dev/mineport/launcher/ui/motion/MotionStage.kt');
 const commandBlock = read('app/src/main/java/dev/mineport/launcher/ui/motion/CommandBlock.kt');
+const propOverlay = read('app/src/main/java/dev/mineport/launcher/ui/motion/PropOverlay.kt');
 must('主题包模型', themePack, /@Serializable[\s\S]{0,80}?data class ThemePack\(/, 'UX-19：主题包是一个可序列化的清单');
 must('主题包扩展名', themePack, /const val EXTENSION = "\.mptheme"/, '对外约定 .mptheme');
 must('主题包是 zip', themePack, /ZipOutputStream\([\s\S]{0,4000}?ZipInputStream\(/, '以后要塞预览图/字体，json 直接当文件不够');
@@ -287,6 +288,19 @@ mustNot('不用 animateDecay', motionStage, /animateDecay/, '吸附目标已知�
 must('松手后落地抖动', motionStage, /railPull\.animateTo\([\s\S]{0,900}?blockScale\.animateTo\(0\.96f/, '先弹回再抖一下，才有「落地」感');
 must('方块跟着下坠', commandBlock, /translationY = stage\.railPull\.value \* 14\.dp\.toPx\(\)/, '方块是导航的载体，要跟着被拽');
 must('rail 橡皮筋位移', rootScreen, /translationY = stage\.railPull\.value \* 8\.dp\.toPx\(\)/, '整列只动 8dp，是拉橡皮筋不是滚动');
+// ── UX-22 T3：道具撞击（下载箭头 / 设置齿轮）─────────────
+must('道具层是独立 overlay', propOverlay, /fun PropOverlay\([\s\S]{0,400}?Canvas\(modifier\.fillMaxSize\(\)\)/, '道具跨度远超方块那 42dp，画进方块会被裁掉');
+must('箭头纯 Path 绘制', propOverlay, /val path = Path\(\)\.apply \{[\s\S]{0,300}?lineTo\(tipX \+ len \* 0\.56f/, '禁止用切图，箭头要跟主色走');
+must('齿轮 8 齿', propOverlay, /val points = 32/, '32 个采样点每 4 个交替半径 = 8 齿');
+must('齿轮扣合旋转', propOverlay, /rotate\(degrees = -45f \+ 45f \* p/, '从斜插转到对正才是「扣合」');
+must('齿轮中心挖孔', propOverlay, /PathOperation\.Difference/, 'overlay 是透明的，挖孔不能用背景色盖');
+must('冲入用减速曲线', motionStage, /CubicBezierEasing\(0\.1f, 0\.9f, 0\.2f, 1f\)/, '前 60% 走完 90% 距离，撞前减速才有重量');
+must('撞击后道具弹开', motionStage, /propRecoil\.animateTo\(1f/, '被顶回来才有反作用力');
+must('道具用枚举而不是位图', motionStage, /enum class MotionProp \{ None, Arrow, Gear \}/, '以后加刷子/丝带只需加枚举值');
+must('下载页用箭头', rootScreen, /"downloads" -> stage\.play\(MotionIntent\.DownloadImpact\)/, '按 tab 分派不同道具');
+must('设置页用齿轮', rootScreen, /"settings" -> stage\.play\(MotionIntent\.SettingsImpact\)/, '设置=精密扣合，下载=暴力撞击');
+must('方块位置上报给 overlay', commandBlock, /coords\.boundsInRoot\(\)\.center/, 'overlay 要知道往哪儿飞');
+mustNot('道具不用 ImageVector', propOverlay, /ImageVector|painterResource/, '矢量图也要 Canvas 手绘');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
