@@ -201,6 +201,13 @@ class GameActivity : ComponentActivity() {
         val app = application as MineportApplication
         val id = intent.getStringExtra(EXTRA_INSTANCE_ID)
         val found = app.container.instanceStore.instances.value.firstOrNull { it.id == id }
+        Log.i(
+            TAG,
+            "launch request: id=" + id + " -> " + (found?.name ?: "<未找到>") +
+                " loader=" + (found?.loaderVersion ?: "-") +
+                " version=" + (found?.minecraftVersion ?: "-") +
+                " 现有实例=" + app.container.instanceStore.instances.value.joinToString(",") { it.name }
+        )
         if (found == null) {
             finish()
             return
@@ -498,7 +505,11 @@ class GameActivity : ComponentActivity() {
                 }
                 StartupTrace.mark(this, "main-exit=" + exit)
                 if (exit == -4) {
-                    val why = hintsFor("本进程已经运行过一次游戏，JVM 不能复用。\n请从最近任务里彻底划掉本应用后重新启动。")
+                    // -4 有两种来源：main 调用次数超限，或 main 自己抛了异常。
+                    // 后者最常见（缺 --add-opens、缺库），必须把 lastError 带出来，
+                    // 否则用户只会看到「JVM 不能复用」这种误导文案。
+                    val detail = JvmLauncher.lastError().ifBlank { "main 抛出异常（详情见 logcat 的 MineportJNI）" }
+                    val why = hintsFor("游戏启动失败：" + detail)
                     status(why)
                     showBanner(why)
                 } else if (exit != 0) {

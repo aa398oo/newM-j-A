@@ -247,18 +247,36 @@ object MinecraftLauncher {
             "\${classpath_separator}" to File.pathSeparator,
             "\${version_name}" to versionId
         )
-        return raw
+        // 不要按前缀白名单筛：Forge 靠 --add-opens / --add-exports / --add-modules
+        // 打开 java.lang.invoke 这类包，少了它们 BootstrapLauncher 会直接
+        // InaccessibleObjectException。-cp 及其值传进去只会被 ignoreUnrecognized 忽略。
+        val substituted = raw
             .map { line -> replacements.fold(line) { acc, (key, value) -> acc.replace(key, value) } }
-            // JNI_CreateJavaVM 只认 VM 选项；-cp/-p/--add-modules/--add-opens 这类
-            // 启动器选项传进去会被忽略（ignoreUnrecognized=true）甚至让创建失败，
-            // 所以这里先按前缀白名单滤一遍。
-            .filter { arg ->
-                arg.startsWith("-D") || arg.startsWith("-X") || arg.startsWith("-javaagent") ||
-                    arg.startsWith("-agentlib") || arg.startsWith("-agentpath") ||
-                    arg.startsWith("-verbose")
-            }
             .filterNot { it.contains("\${") }
+
+        // 关键：JNI 里的 HotSpot 只认等号形式（--add-opens=java.base/java.lang.invoke=目标），
+        // 而版本 json 用的是 launcher 的空格分隔写法。粘成单个 token，否则
+        // ignoreUnrecognized 会把 --add-opens 连同它的值一起丢掉。
+        val glued = ArrayList<String>(substituted.size)
+        var i = 0
+        while (i < substituted.size) {
+            val arg = substituted[i]
+            if (arg in GLUE_OPTIONS && i + 1 < substituted.size) {
+                glued += arg + "=" + substituted[i + 1]
+                i += 2
+            } else {
+                glued += arg
+                i += 1
+            }
+        }
+        return glued
     }
+
+    /** 这些选项在 java launcher 里是「选项 + 值」两个 token，HotSpot 只认 `--opt=value`。 */
+    private val GLUE_OPTIONS = setOf(
+        "--add-opens", "--add-exports", "--add-modules", "--add-reads",
+        "--patch-module", "--limit-modules", "--module-path", "--add-exports",
+    )
 
     private fun rulesAllow(rules: JsonElement?): Boolean {
         if (rules !is JsonArray || rules.isEmpty()) return true

@@ -44,6 +44,7 @@ class ForgeJvmRunner(
     private var started = false
     private var failure: String? = null
     private var stagedJvmArgs: List<String> = emptyList()
+    private var stagedRuns: List<ForgeInstaller.ProcessorRun> = emptyList()
 
     /**
      * stage 一结束就调用：把 Forge 的 `-p` / `--add-modules` / `--add-opens` 抄出来。
@@ -52,6 +53,7 @@ class ForgeJvmRunner(
      * 之后再进游戏时 `JvmLauncher.start` 会直接复用，不会（也不能）补参数。
      */
     override fun attach(staged: ForgeInstaller.Staged) {
+        stagedRuns = staged.runs
         stagedJvmArgs = runCatching {
             val version = MinecraftLauncher.parseVersionJson(staged.versionJson.toString())
             val id = ForgeInstaller.loaderVersion()
@@ -67,6 +69,7 @@ class ForgeJvmRunner(
         if (!started) startJvm()
         failure?.let { throw IllegalStateException(it) }
         Log.i(TAG, "processor ${job.mainClass} args=" + job.args.size)
+        Log.i(TAG, "  cmd: " + job.args.joinToString(" "))
         // 让 jni_bridge 把 main 的异常文本落到这个文件：processor 的 stdout 抓不到，
         // 但「main threw: <异常栈>」已经足够区分参数错与缺类。
         val log = File(rootDir, "logs").apply { mkdirs() }
@@ -93,15 +96,21 @@ class ForgeJvmRunner(
             // 指向尚不存在的路径（JVM 只是忽略），装完就能被同一 JVM 读到。
             add(File(rootDir, "versions/$minecraftVersion/$minecraftVersion.jar"))
             ForgeInstaller.patchedJar(rootDir)?.let { add(it) }
-            // 全量 libraries：安装期工具 + Forge 运行时库 + 原版库都在这里。
-            val libraries = File(rootDir, "libraries")
-            if (libraries.isDirectory) {
-                libraries.walkTopDown()
-                    .filter { it.isFile && it.extension.equals("jar", ignoreCase = true) }
-                    .sortedBy { it.absolutePath }
-                    .forEach { add(it) }
+            // 只给 processor 的 classpath，不全量扫 libraries：libraries 里同时躺着多个
+            // 版本的同一个库（比如 Fabric 装过的 authlib 6.x，Java 25 编译），
+            // FART 扫 classpath 建继承表时会读到它们，直接 UnsupportedClassVersionError。
+            stagedRuns.forEach { addAll(it.classPath) }
+            if (stagedRuns.isEmpty()) {
+                // 兜底：attach 没被调用（单独测 runner 时），退回全量扫描。
+                val libraries = File(rootDir, "libraries")
+                if (libraries.isDirectory) {
+                    libraries.walkTopDown()
+                        .filter { it.isFile && it.extension.equals("jar", ignoreCase = true) }
+                        .sortedBy { it.absolutePath }
+                        .forEach { add(it) }
+                }
             }
-        }.filter { it.isFile }
+        }.filter { it.isFile }.distinctBy { it.absolutePath }
 
         val spec = JvmLaunchSpec(
             instanceId = "forge-install",

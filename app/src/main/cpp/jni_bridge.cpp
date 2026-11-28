@@ -363,17 +363,34 @@ std::string describePendingException(JNIEnv* env) {
         return "(unprintable throwable)";
     }
     jmethodID toString = env->GetMethodID(throwableClass, "toString", "()Ljava/lang/String;");
+    jmethodID getCause = env->GetMethodID(throwableClass, "getCause", "()Ljava/lang/Throwable;");
     std::string text = "(unprintable throwable)";
     if (toString == nullptr) {
         env->ExceptionClear();
     } else {
-        auto description = static_cast<jstring>(env->CallObjectMethod(pending, toString));
-        if (env->ExceptionCheck()) {
-            env->ExceptionClear();
-        } else if (description != nullptr) {
-            text = toStd(env, description);
-            env->DeleteLocalRef(description);
+        // Forge 的 processor 常把真实错误包一层（"Failed to execute task X"），
+        // 只打最外层等于没打：把 cause 链一起带出来，最多 5 层。
+        text.clear();
+        jobject current = pending;  // 借用引用，不删
+        for (int depth = 0; current != nullptr && depth < 5; ++depth) {
+            auto description = static_cast<jstring>(env->CallObjectMethod(current, toString));
+            if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+            } else if (description != nullptr) {
+                if (depth > 0) text += " <- ";
+                text += toStd(env, description);
+                env->DeleteLocalRef(description);
+            }
+            if (getCause == nullptr) break;
+            jobject cause = env->CallObjectMethod(current, getCause);
+            if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+                cause = nullptr;
+            }
+            if (depth > 0) env->DeleteLocalRef(current);
+            current = cause;
         }
+        if (text.empty()) text = "(unprintable throwable)";
     }
     env->DeleteLocalRef(throwableClass);
     env->DeleteLocalRef(pending);
@@ -1098,7 +1115,35 @@ Java_dev_mineport_launcher_jvm_JvmLauncher_nativeRunMainClass(
     }
 
     LOGI("invoking %s.main with %d args", name.c_str(), static_cast<int>(count));
+
+    // processor 的报错大多走 System.err（堆栈），只拿挂起异常看不到细节。
+    // 这里在调用期间把 fd 1/2 接到日志文件，main 里所有 printStackTrace 都会落盘。
+    int savedOut = -1;
+    int savedErr = -1;
+    bool redirected = false;
+    if (!outPath.empty()) {
+        std::ofstream header(outPath, std::ios::trunc);
+        header << "=== " << name << " (" << count << " args) ===\n";
+        header.close();
+        const int fd = ::open(outPath.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0600);
+        if (fd >= 0) {
+            fflush(stdout);
+            fflush(stderr);
+            savedOut = ::dup(STDOUT_FILENO);
+            savedErr = ::dup(STDERR_FILENO);
+            ::dup2(fd, STDOUT_FILENO);
+            ::dup2(fd, STDERR_FILENO);
+            ::close(fd);
+            redirected = true;
+        }
+    }
     env->CallStaticVoidMethod(target, mainMethod, argv);
+    if (redirected) {
+        fflush(stdout);
+        fflush(stderr);
+        if (savedOut >= 0) { ::dup2(savedOut, STDOUT_FILENO); ::close(savedOut); }
+        if (savedErr >= 0) { ::dup2(savedErr, STDERR_FILENO); ::close(savedErr); }
+    }
 
     jint result = 0;
     if (env->ExceptionCheck()) {
@@ -1107,12 +1152,12 @@ Java_dev_mineport_launcher_jvm_JvmLauncher_nativeRunMainClass(
         LOGE("main threw: %s", detail.c_str());
         g_lastError = "main 抛出异常：" + detail;
         if (!outPath.empty()) {
-            std::ofstream out(outPath, std::ios::trunc);
-            out << "main threw:\n" << detail << "\n";
+            std::ofstream out(outPath, std::ios::app);
+            out << "main threw: " << detail << "\n";
         }
         result = -4;
     } else if (!outPath.empty()) {
-        std::ofstream out(outPath, std::ios::trunc);
+        std::ofstream out(outPath, std::ios::app);
         out << "main returned 0\n";
     }
 

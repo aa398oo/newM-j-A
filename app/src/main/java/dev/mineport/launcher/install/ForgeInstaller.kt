@@ -408,7 +408,11 @@ object ForgeInstaller {
         var i = 0
         for (run in staged.runs) {
             onStage("processor ${++i}/${staged.runs.size}：${run.mainClass}")
-            val code = runner.run(run)
+            // processor 内部是同步 JNI 调用（下载/解压/重映射，几十秒到几分钟）。
+            // 留在主线程会直接 ANR（实测 5s 就超时），必须切到 IO。
+            val code = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runner.run(run)
+            }
             if (code != 0) {
                 // 退出码本身没法诊断：installertools 的参数错、FART 的 NoClassDefFoundError
                 // 都只是「非 0」。实现方若把 main 的输出落过盘，就把尾部带出来。
