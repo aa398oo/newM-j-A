@@ -82,6 +82,8 @@ class GameHostLayout @JvmOverloads constructor(
                 }
                 val idx = pickWheelIndex(x, y, id)
                 if (idx >= 0 || inWheelCircle(x, y)) {
+                    // 记录一次触摸，让「4 秒无操作自动收起」不会在刚点完就缩回去
+                    pad?.markTouch()
                     owners.put(id, OWNER_WHEEL)
                     wheelIndex.put(id, idx)
                     if (idx >= 0) onWheelAction?.invoke(actions[idx], true)

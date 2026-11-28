@@ -172,6 +172,16 @@ class GameActivity : ComponentActivity() {
         ) { slot, down -> handleWheel(slot, down) }
         host.actionPad = actionPad
 
+        // 4 秒无操作自动收起（按住槽位时不收，见 ActionPad.autoCollapseIfIdle）。
+        val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val idleTick = object : Runnable {
+            override fun run() {
+                actionPad.autoCollapseIfIdle()
+                idleHandler.postDelayed(this, 1000L)
+            }
+        }
+        idleHandler.postDelayed(idleTick, 1000L)
+
         // 摇杆绘制层：铺满全屏的透明 ComposeView，只画基座与摇杆头，不消费触摸。
         val padOverlay = ComposeView(this).apply {
             setContent {

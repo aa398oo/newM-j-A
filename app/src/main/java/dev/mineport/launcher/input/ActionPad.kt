@@ -62,6 +62,31 @@ class ActionPad(
         mode = PadMode.PLAY
     }
 
+    /** 最近一次触摸轮盘的时间（uptimeMillis）。用于「4 秒无操作自动收起」。 */
+    private var lastTouchAt = 0L
+
+    /** 记录一次触摸；由宿主在 WHEEL 指针的 DOWN/MOVE 时调用。 */
+    fun markTouch() {
+        lastTouchAt = android.os.SystemClock.uptimeMillis()
+    }
+
+    /**
+     * 空闲超过 [timeoutMs] 就自动收起成小球。
+     *
+     * 只在**展开且没有按住任何槽**时收——否则会出现「按着攻击键突然缩成球」的诡异手感。
+     * @return 是否真的收起了
+     */
+    fun autoCollapseIfIdle(
+        timeoutMs: Long = 4000L,
+        now: Long = android.os.SystemClock.uptimeMillis(),
+    ): Boolean {
+        if (!expanded) return false
+        if (activeSlot != null) return false
+        if (now - lastTouchAt < timeoutMs) return false
+        collapse()
+        return true
+    }
+
     /** 当前按住的槽位（null 表示没有）。 */
     var activeSlot by mutableStateOf<ActionSlot?>(null)
         private set
