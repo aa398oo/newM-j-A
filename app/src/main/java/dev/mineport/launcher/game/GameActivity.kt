@@ -18,7 +18,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import dev.mineport.launcher.MineportApplication
 import dev.mineport.launcher.data.GameInstance
 import dev.mineport.launcher.input.ActionWheel
-import dev.mineport.launcher.input.GameAction
+import dev.mineport.launcher.input.ActionSlot
+import dev.mineport.launcher.input.ActionType
 import dev.mineport.launcher.jvm.JvmLaunchSpec
 import dev.mineport.launcher.jvm.JvmLauncher
 import dev.mineport.launcher.jvm.JvmStartResult
@@ -66,32 +67,32 @@ class GameActivity : ComponentActivity() {
     }
 
     /** 轮盘按下过、还没抬起的动作，避免重复 press/release。 */
-    private val heldWheel = HashSet<GameAction>()
+    private val heldWheel = HashSet<ActionSlot>()
 
     /** 轮盘当前高亮的扇区；触摸命中由 GameHostLayout 按 pointer 手动判定后回调这里。 */
-    private var wheelActive by mutableStateOf<GameAction?>(null)
+    private var wheelActive by mutableStateOf<ActionSlot?>(null)
 
-    private fun keyOf(action: GameAction): Int = when (action) {
-        GameAction.FORWARD -> 87     // W
-        GameAction.BACK -> 83        // S
-        GameAction.LEFT -> 65        // A
-        GameAction.RIGHT -> 68       // D
-        GameAction.JUMP -> 32        // Space
-        GameAction.SNEAK -> 340      // LeftShift
-        GameAction.ATTACK -> 69      // E
-        GameAction.USE -> 81         // Q
-    }
-
-    private fun handleWheel(action: GameAction, down: Boolean) {
-        val key = keyOf(action)
+    /**
+     * 轮盘动作下发。
+     *
+     * KEY 走 `nativeSendKey`（critical_send_key）；
+     * 鼠标左右键暂时没有独立的 native 入口（`nativeSendPointer` 会顺带移动光标），
+     * 所以先只记日志，等 C++ 侧补 `nativeSendMouseButton` 再接上。
+     */
+    private fun handleWheel(slot: ActionSlot, down: Boolean) {
         if (down) {
-            if (heldWheel.add(action)) {
-                NativeRenderer.nativeSendKey(key, NativeRenderer.KEY_PRESS)
-                Log.i(TAG, "wheel press " + action.name)
+            if (!heldWheel.add(slot)) return
+            when (slot.type) {
+                ActionType.KEY -> NativeRenderer.nativeSendKey(slot.code, NativeRenderer.KEY_PRESS)
+                else -> Log.w(TAG, "wheel: 鼠标键暂未接通 -> " + slot.label)
             }
-        } else if (heldWheel.remove(action)) {
-            NativeRenderer.nativeSendKey(key, NativeRenderer.KEY_RELEASE)
-            Log.i(TAG, "wheel release " + action.name)
+            Log.i(TAG, "wheel press " + slot.label)
+        } else if (heldWheel.remove(slot)) {
+            when (slot.type) {
+                ActionType.KEY -> NativeRenderer.nativeSendKey(slot.code, NativeRenderer.KEY_RELEASE)
+                else -> Unit
+            }
+            Log.i(TAG, "wheel release " + slot.label)
         }
     }
 

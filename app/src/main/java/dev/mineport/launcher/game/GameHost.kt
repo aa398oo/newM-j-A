@@ -6,7 +6,8 @@ import android.util.SparseIntArray
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
-import dev.mineport.launcher.input.GameAction
+import dev.mineport.launcher.input.ActionPad
+import dev.mineport.launcher.input.ActionSlot
 import dev.mineport.launcher.input.MovePad
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -32,7 +33,7 @@ class GameHostLayout @JvmOverloads constructor(
     var movePad: MovePad? = null
 
     /** 轮盘动作回调：true=按下（持续），false=松开。 */
-    var onWheelAction: ((GameAction, Boolean) -> Unit)? = null
+    var onWheelAction: ((ActionSlot, Boolean) -> Unit)? = null
 
     private val injector = TouchInjector(this)
 
@@ -42,7 +43,7 @@ class GameHostLayout @JvmOverloads constructor(
     /** pointerId -> 当前扇区下标（-1 表示圆内但太靠近中心，无动作） */
     private val wheelIndex = SparseIntArray()
 
-    private val actions: List<GameAction> = GameAction.Defaults
+    private val actions: List<ActionSlot> = ActionPad.defaultSlots()
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {

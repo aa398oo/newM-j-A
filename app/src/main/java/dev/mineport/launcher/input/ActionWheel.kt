@@ -25,9 +25,9 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun ActionWheel(
-    active: GameAction?,
+    active: ActionSlot?,
     modifier: Modifier = Modifier,
-    actions: List<GameAction> = GameAction.Defaults
+    actions: List<ActionSlot> = ActionPad.defaultSlots()
 ) {
     if (actions.isEmpty()) return
     val density = LocalDensity.current
