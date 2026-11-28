@@ -186,8 +186,14 @@ fun ContentTab(
         }
     }
 
-    val needsLoaderWarning = kind.needsLoader && instance.loader == Loader.VANILLA
+    fun uninstall(hit: ModrinthHit) {
+        if (active != null) return
+        val ok = ContentInstaller.uninstall(instanceDir, kind, hit.slug)
+        installedTick += 1
+        message = if (ok) "已删除 " + hit.title else "没找到可删的文件（可能已经被删过）"
+    }
 
+    val needsLoaderWarning = kind.needsLoader && instance.loader == Loader.VANILLA
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -301,7 +307,8 @@ fun ContentTab(
                         ContentRow(
                             hit = hit,
                             installed = installed,
-                            onClick = { install(hit) }
+                            onClick = { install(hit) },
+                            onUninstall = if (installed) ({ uninstall(hit) }) else null
                         )
                     }
                 }
@@ -359,7 +366,12 @@ fun ContentTab(
 }
 
 @Composable
-private fun ContentRow(hit: ModrinthHit, installed: Boolean, onClick: () -> Unit) {
+private fun ContentRow(
+    hit: ModrinthHit,
+    installed: Boolean,
+    onClick: () -> Unit,
+    onUninstall: (() -> Unit)? = null
+) {
     val cs = MaterialTheme.colorScheme
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -407,6 +419,18 @@ private fun ContentRow(hit: ModrinthHit, installed: Boolean, onClick: () -> Unit
                         .clickable(onClick = onClick)
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
+                // 卸载放在「已装」下面：能装就得能删，但删是破坏性操作，别做得比装更显眼。
+                if (installed && onUninstall != null) {
+                    Text(
+                        "卸载",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = cs.error,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onUninstall)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
             }
         }
     }

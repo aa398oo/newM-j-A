@@ -416,6 +416,20 @@ must('筛空有专门空态', contentTab, /这一页里还没有已装的内容/
 must('开关只在有已装时出现', contentTab,
   /if \(installedHere > 0\) \{[\s\S]{0,200}?只看已装/,
   '一条都没装时摆个开关是噪音');
+// ---------- 内容卸载 ----------
+must('能定位已装文件', contentInstaller,
+  /fun installedFile\(instanceDir: File, type: ProjectType, slug: String\): File\?/,
+  '卸载要先知道删哪个文件');
+must('跳过未下完的 .part', contentInstaller, /!it\.name\.endsWith\("\.part"\)/,
+  '删 .part 只会让下载看起来更奇怪');
+must('只删 slug 命中的那一个', contentInstaller,
+  /fun uninstall\([\s\S]{0,600}?file\.delete\(\)/,
+  '前置是共用的，跟着删会连累别的模组');
+must('卡片有卸载入口', contentTab, /if \(installed && onUninstall != null\)/,
+  '能装就得能删');
+must('卸载后刷新已装标记', contentTab,
+  /fun uninstall\(hit: ModrinthHit\)[\s\S]{0,300}?installedTick \+= 1/,
+  '不刷新的话按钮还停在「已装」');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

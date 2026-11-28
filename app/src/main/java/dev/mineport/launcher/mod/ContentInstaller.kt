@@ -92,6 +92,30 @@ object ContentInstaller {
         return dir.listFiles()?.any { it.isFile && slugKey(it.name).startsWith(key) } == true
     }
 
+    /**
+     * 找出这个项目落在目标目录里的文件（给「卸载」用）。
+     *
+     * 跳过 `.part`：那是没下完的临时文件，删它没有意义。
+     */
+    fun installedFile(instanceDir: File, type: ProjectType, slug: String): File? {
+        val key = slugKey(slug)
+        if (key.isEmpty()) return null
+        return targetDir(instanceDir, type).listFiles()
+            ?.filter { it.isFile && !it.name.endsWith(".part") }
+            ?.firstOrNull { slugKey(it.name).startsWith(key) }
+    }
+
+    /**
+     * 删掉这个项目的文件。
+     *
+     * 只删 slug 命中的那一个：模组走 [ModInstaller] 装时会连带前置（Fabric API 之类），
+     * 前置是给别的模组共用的，跟着删会连累别的模组起不来。
+     */
+    fun uninstall(instanceDir: File, type: ProjectType, slug: String): Boolean {
+        val file = installedFile(instanceDir, type, slug) ?: return false
+        return file.delete()
+    }
+
     private fun slugKey(raw: String): String =
         raw.lowercase().filter { it.isLetterOrDigit() }
 }
