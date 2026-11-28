@@ -6,6 +6,9 @@ import androidx.compose.runtime.setValue
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
+/** 动作轮盘的模式：游戏态 / 编辑态。两者互斥。 */
+enum class PadMode { PLAY, EDIT }
+
 /** 动作槽的动作类型：键盘键 / 鼠标左键 / 鼠标右键。 */
 enum class ActionType { KEY, MOUSE_LEFT, MOUSE_RIGHT }
 
@@ -38,6 +41,26 @@ class ActionPad(
     /** 是否展开成 8 槽轮盘。 */
     var expanded by mutableStateOf(true)
         private set
+
+    /**
+     * 当前模式。编辑态与游戏态**互斥**：进入编辑一定先 `up()`（松开所有按住的键），
+     * 避免「正在按住攻击时点编辑」导致按键卡死。编辑态本身不进持久化模型——
+     * 它只存在于当前进程内存里，重进游戏永远回到 PLAY。
+     */
+    var mode by mutableStateOf(PadMode.PLAY)
+        private set
+
+    /** 进入编辑模式。 */
+    fun enterEdit() {
+        up()
+        mode = PadMode.EDIT
+    }
+
+    /** 退出编辑模式。 */
+    fun exitEdit() {
+        up()
+        mode = PadMode.PLAY
+    }
 
     /** 当前按住的槽位（null 表示没有）。 */
     var activeSlot by mutableStateOf<ActionSlot?>(null)
