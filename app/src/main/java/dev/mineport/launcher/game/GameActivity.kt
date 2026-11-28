@@ -343,7 +343,9 @@ class GameActivity : ComponentActivity() {
             codeCacheMB = 256,
             runtimeRoot = runtimeRoot,
             classPath = classPath,
-            useCacio = instance.useCacio
+            useCacio = instance.useCacio,
+            // Forge 的 module path / add-opens 只能在这时候给：JVM 一旦创建就改不了。
+            extraJvmArgs = plan.jvmArgs
         )
         StartupTrace.mark(this, "plan-ok:" + plan.classPath.size + " jars")
         StartupTrace.mark(this, "jvm-creating")

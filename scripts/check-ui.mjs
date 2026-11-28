@@ -351,6 +351,21 @@ must('Forge 安装走 ForgeInstaller.install', versionInstallScreen, /ForgeInsta
 must('Forge 行可选且写死首发版本', versionInstallScreen, /loader == Loader\.FORGE -> "已选 " \+ ForgeInstaller\.SUPPORTED_FORGE/, '');
 must('patched jar 路径可正推', forgeInstaller, /fun patchedJar\(rootDir: File\): File\?/, '启动 classpath 要先于 stage 引用它');
 must('installer 地址由常量拼出', forgeInstaller, /fun installerUrl\(\): String/, '');
+// ---------- Forge 启动路径 ----------
+const mcLauncher = read('app/src/main/java/dev/mineport/launcher/game/MinecraftLauncher.kt');
+const jvmLauncher = read('app/src/main/java/dev/mineport/launcher/jvm/JvmLauncher.kt');
+
+must('启动计划带 JVM 参数', mcLauncher, /val jvmArgs: List<String> = emptyList\(\)/, 'Forge 的 -p 只能在建 JVM 时给');
+must('展开 arguments.jvm', mcLauncher, /fun buildJvmArgs\(chain: List<VersionJson>/, '原版没有这一段，Forge 有 16 条');
+must('替换 library_directory', mcLauncher, /\\\$\{library_directory\}" to librariesDir\.absolutePath/, 'module path 要指到本地 libraries');
+must('替换 classpath_separator', mcLauncher, /\\\$\{classpath_separator\}" to File\.pathSeparator/, '');
+must('替换 version_name', mcLauncher, /\\\$\{version_name\}" to versionId/, 'ignoreList 里要用它');
+must('未替换的占位符整条丢弃', mcLauncher, /filterNot \{ it\.contains\("\\\$\{"\) \}/, '');
+must('JVM 规格接收额外参数', jvmLauncher, /val extraJvmArgs: List<String> = emptyList\(\)/, '');
+must('额外参数进 options', jvmLauncher, /addAll\(spec\.extraJvmArgs\)/, '');
+must('游戏启动透传 jvmArgs', gameActivity, /extraJvmArgs = plan\.jvmArgs/, '');
+must('patched jar 落到版本目录', forgeInstaller, /versions\/\$id"\).apply \{ mkdirs\(\) \}[\s\S]{0,700}?versionJar/, 'MinecraftLauncher 只认 versions/<id>/<id>.jar');
+must('安装 JVM 抄 Forge 的 jvm 参数', forgeJvm, /override fun attach\(staged: ForgeInstaller\.Staged\)/, '装完同一台 JVM 要能跑 Forge');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

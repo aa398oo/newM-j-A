@@ -2,6 +2,7 @@ package dev.mineport.launcher.install
 
 import android.content.Context
 import android.util.Log
+import dev.mineport.launcher.game.MinecraftLauncher
 import dev.mineport.launcher.jvm.JvmLaunchSpec
 import dev.mineport.launcher.jvm.JvmLauncher
 import dev.mineport.launcher.jvm.JvmStartResult
@@ -32,6 +33,25 @@ class ForgeJvmRunner(
 
     private var started = false
     private var failure: String? = null
+    private var stagedJvmArgs: List<String> = emptyList()
+
+    /**
+     * stage 一结束就调用：把 Forge 的 `-p` / `--add-modules` / `--add-opens` 抄出来。
+     *
+     * 这台 JVM 装完还要接着跑游戏，Forge 的 module path 必须在创建时就在位——
+     * 之后再进游戏时 `JvmLauncher.start` 会直接复用，不会（也不能）补参数。
+     */
+    override fun attach(staged: ForgeInstaller.Staged) {
+        stagedJvmArgs = runCatching {
+            val version = MinecraftLauncher.parseVersionJson(staged.versionJson.toString())
+            val id = ForgeInstaller.versionId(staged.versionJson)
+            MinecraftLauncher.buildJvmArgs(listOf(version), id, File(rootDir, "libraries"))
+        }.getOrElse {
+            Log.w(TAG, "解析 Forge 的 jvm 参数失败：" + it.message)
+            emptyList()
+        }
+        Log.i(TAG, "forge jvm args = " + stagedJvmArgs.size)
+    }
 
     override fun run(job: ForgeInstaller.ProcessorRun): Int {
         if (!started) startJvm()
@@ -79,7 +99,8 @@ class ForgeJvmRunner(
             useCacio = false,
             // 必须 true：FCL 的 lwjgl 3.4.1 要进 classpath，否则装完进游戏时
             // GLFW 会去找 Android 上不存在的 libglfw.so。
-            useFclLwjgl = true
+            useFclLwjgl = true,
+            extraJvmArgs = stagedJvmArgs
         )
         when (val result = JvmLauncher.start(context, spec)) {
             is JvmStartResult.Ready -> Log.i(TAG, "JVM ready " + result.javaVersion)

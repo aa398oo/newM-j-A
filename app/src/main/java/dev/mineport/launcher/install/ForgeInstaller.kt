@@ -383,6 +383,7 @@ object ForgeInstaller {
         onStage: (String) -> Unit,
         runner: ProcessorRunner
     ): Result<Unit> = runCatching {
+        runner.attach(staged)
         var i = 0
         for (run in staged.runs) {
             onStage("processor ${++i}/${staged.runs.size}：${run.mainClass}")
@@ -394,6 +395,15 @@ object ForgeInstaller {
     /** processor 执行器。Android 侧用 JVM；测试里可以换成假实现。 */
     fun interface ProcessorRunner {
         fun run(job: ProcessorRun): Int
+
+        /**
+         * 拿到 stage 结果后补配置。
+         *
+         * 给 [dev.mineport.launcher.install.ForgeJvmRunner] 用：它要在建 JVM 之前
+         * 读 Forge 的 `arguments.jvm`（module path），而那要到 stage 之后才可见。
+         * JVM 一个进程只能建一次，参数错过就补不回来了。
+         */
+        fun attach(staged: Staged) {}
     }
 
     /**
@@ -429,6 +439,13 @@ object ForgeInstaller {
 
         val id = versionId(staged.versionJson)
         val dir = File(rootDir, "versions/$id").apply { mkdirs() }
+        // 把打补丁的 client jar 放到版本目录：MinecraftLauncher 找 jar 只看
+        // versions/<id>/<id>.jar，而 Forge 的 -DignoreList 里写的也是
+        // "${version_name}.jar"——两边正好落到同一个文件上。
+        val versionJar = File(dir, "$id.jar")
+        if (!versionJar.isFile || versionJar.length() != patched!!.length()) {
+            patched.copyTo(versionJar, overwrite = true)
+        }
         val json = File(dir, "$id.json")
         json.writeText(staged.versionJson.toString(), Charsets.UTF_8)
         json

@@ -35,7 +35,15 @@ data class JvmLaunchSpec(
      * glfwInit/窗口桥。关掉时回到 MC 自带的 3.3.1（会在 GLFW 初始化处
      * UnsatisfiedLinkError: libglfw.so）。
      */
-    val useFclLwjgl: Boolean = true
+    val useFclLwjgl: Boolean = true,
+    /**
+     * 版本 JSON 里 `arguments.jvm` 展开后的参数（Forge 的 module path 就在这里）。
+     *
+     * 这条链路的顺序要求很硬：`-p` / `--add-modules` / `--add-opens` 只能在
+     * JNI_CreateJavaVM 时给，JVM 起来之后改不了。又因为一个进程只能建一次 JVM，
+     * 所以「装 Forge 时要不要带这些参数」必须一次决定对。
+     */
+    val extraJvmArgs: List<String> = emptyList()
 )
 
 sealed interface JvmStartResult {
@@ -219,6 +227,9 @@ object JvmLauncher {
             add("-Xmx" + spec.memoryMB + "m")
             // 初始堆压在物理内存的 1/8 内，启动更快，也避免低内存机一开始就换页。
             add("-Xms" + minOf(512, spec.memoryMB / 2).coerceAtLeast(128) + "m")
+            // 版本自带 JVM 参数（Forge 的 module path / add-opens）放在最后：
+            // 它们只影响模块与反射开放，与上面的堆设置互不干扰。
+            addAll(spec.extraJvmArgs)
         }
         Log.i("MineportJVM", "libjvm=" + libjvm.absolutePath)
         Log.i("MineportJVM", "options=" + options.joinToString(" "))

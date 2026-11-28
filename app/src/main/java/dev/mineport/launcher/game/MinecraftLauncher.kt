@@ -18,7 +18,13 @@ data class LaunchPlan(
     val mainClass: String,
     val classPath: List<File>,
     val gameArgs: List<String>,
-    val nativesDir: File
+    val nativesDir: File,
+    /**
+     * 版本 JSON 的 `arguments.jvm`（Forge 的 `-p` / `--add-modules` 在这里）。
+     *
+     * 必须在创建 JVM 时给，JVM 起来后改不了——所以由 [JvmLaunchSpec.extraJvmArgs] 带下去。
+     */
+    val jvmArgs: List<String> = emptyList()
 )
 
 /**
@@ -31,6 +37,9 @@ data class LaunchPlan(
 object MinecraftLauncher {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    /** 供安装器复用同一套解析：把 Forge 的 version.json 文本读成 [VersionJson]。 */
+    fun parseVersionJson(text: String): VersionJson = json.decodeFromString(text)
 
     suspend fun prepare(
         rootDir: File,
@@ -84,7 +93,8 @@ object MinecraftLauncher {
             val ignoredNativesDir = nativesDir
 
             val args = buildArgs(chain, versionId, playerName, gameDir, assetsDir, account)
-            Result.success(LaunchPlan(mainClass, classPath, args, nativesDir))
+            val jvmArgs = buildJvmArgs(chain, versionId, librariesDir)
+            Result.success(LaunchPlan(mainClass, classPath, args, nativesDir, jvmArgs))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -183,6 +193,50 @@ object MinecraftLauncher {
             out += result
         }
         return out
+    }
+
+    /**
+     * 展开 `arguments.jvm`。
+     *
+     * 原版 1.20.1 没有这一段（JVM 参数由启动器给），Forge 47.2.0 有 16 条：`-p` 的
+     * module path、`--add-modules ALL-MODULE-PATH`、几条 `--add-opens`/`--add-exports`，
+     * 以及 `-DlibraryDirectory` / `-DignoreList`。少一条 BootstrapLauncher 就起不来。
+     *
+     * 三个占位符是启动器契约：`${library_directory}`、`${classpath_separator}`、
+     * `${version_name}`。替换后仍含 `${` 的参数整条丢掉——宁可少一条，也不要把
+     * 字面量占位符当路径传给 JVM（这种错误在 logcat 里几乎看不出来）。
+     */
+    fun buildJvmArgs(chain: List<VersionJson>, versionId: String, librariesDir: File): List<String> {
+        val raw = mutableListOf<String>()
+        for (version in chain.reversed()) {
+            val jvm = (version.arguments as? JsonObject)?.get("jvm") ?: continue
+            if (jvm !is JsonArray) continue
+            for (item in jvm) {
+                when (item) {
+                    is JsonPrimitive -> if (item.isString) raw += item.content
+                    is JsonObject -> {
+                        if (!rulesAllow(item["rules"])) continue
+                        when (val value = item["value"]) {
+                            is JsonPrimitive -> if (value.isString) raw += value.content
+                            is JsonArray -> value.forEach { part ->
+                                if (part is JsonPrimitive && part.isString) raw += part.content
+                            }
+                            else -> {}
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+        if (raw.isEmpty()) return emptyList()
+        val replacements = listOf(
+            "\${library_directory}" to librariesDir.absolutePath,
+            "\${classpath_separator}" to File.pathSeparator,
+            "\${version_name}" to versionId
+        )
+        return raw
+            .map { line -> replacements.fold(line) { acc, (key, value) -> acc.replace(key, value) } }
+            .filterNot { it.contains("\${") }
     }
 
     private fun rulesAllow(rules: JsonElement?): Boolean {
