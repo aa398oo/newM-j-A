@@ -68,6 +68,18 @@ class GameHostLayout @JvmOverloads constructor(
                         }
                     }
                 }
+                // 展开态：点中心圆（24dp 内）收起成小球。
+                if (pad != null && pad.expanded) {
+                    val w = wheelView
+                    if (w != null && w.width > 0) {
+                        val cx = w.left + w.width / 2f
+                        val cy = w.top + w.height / 2f
+                        val ball = 24f * resources.displayMetrics.density
+                        if (hypot(x - cx, y - cy) <= ball) {
+                            pad.collapse()
+                        }
+                    }
+                }
                 val idx = pickWheelIndex(x, y, id)
                 if (idx >= 0 || inWheelCircle(x, y)) {
                     owners.put(id, OWNER_WHEEL)
