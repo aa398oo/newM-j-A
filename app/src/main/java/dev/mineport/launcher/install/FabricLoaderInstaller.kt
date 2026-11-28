@@ -28,6 +28,30 @@ object FabricLoaderInstaller {
     private const val META = "https://meta.fabricmc.net"
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** 可选 loader 版本。stable 来自 Fabric meta 的 loader.stable 字段。 */
+    data class LoaderOption(val version: String, val stable: Boolean)
+
+    /**
+     * 列出某个 Minecraft 版本可用的 Fabric loader 版本（最新在前）。
+     * 安装页要让人自己选，不能只用 pickLoader 的默认值。
+     */
+    suspend fun listLoaders(minecraftVersion: String): Result<List<LoaderOption>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val text = Http.get("$META/v2/versions/loader/$minecraftVersion")
+                val list = json.parseToJsonElement(text).jsonArray
+                val options = list.mapNotNull { element ->
+                    val loader = element.jsonObject["loader"]?.jsonObject ?: return@mapNotNull null
+                    val version = loader["version"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                    val stable = (loader["stable"]?.jsonPrimitive?.content ?: "false") == "true"
+                    LoaderOption(version, stable)
+                }
+                Result.success(options)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
     suspend fun install(
         rootDir: File,
         minecraftVersion: String,

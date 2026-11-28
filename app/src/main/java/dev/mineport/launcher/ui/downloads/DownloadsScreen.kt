@@ -1,5 +1,6 @@
 package dev.mineport.launcher.ui.downloads
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,13 +20,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -38,7 +36,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,15 +50,10 @@ import dev.mineport.launcher.data.GameInstance
 import dev.mineport.launcher.download.VersionEntry
 import dev.mineport.launcher.download.VersionManifest
 import dev.mineport.launcher.download.VersionManifestClient
-import dev.mineport.launcher.install.InstallReport
-import dev.mineport.launcher.install.VersionInstaller
 import dev.mineport.launcher.mod.ProjectType
 import dev.mineport.launcher.ui.components.EmptyState
 import dev.mineport.launcher.ui.motion.PixelDotsLoading
 import java.io.File
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 
 /**
  * 下载页的分类。
@@ -91,6 +83,8 @@ fun DownloadsScreen(
     var tab by remember { mutableStateOf(DownloadTab.VERSION) }
     var targetId by remember { mutableStateOf<String?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    // 非空时内容区让给安装页（返回后回到列表，列表状态还在）。
+    var installFor by remember { mutableStateOf<VersionEntry?>(null) }
 
     // 默认装到最近玩的版本；版本被删了就退回第一个。
     LaunchedEffect(instances) {
@@ -121,6 +115,21 @@ fun DownloadsScreen(
             " 个版本 · " + (if (it.fromCache) "离线缓存" else "在线")
     }
 
+    // 安装页独占整个内容区（rail 之外）：它有自己的返回，不该再被「下载 + 分类」顶栏挤高度。
+    val pending = installFor
+    if (pending != null) {
+        VersionInstallScreen(
+            container = container,
+            version = pending,
+            onBack = { installFor = null },
+            onDone = { created ->
+                installFor = null
+                Toast.makeText(appContext, "已创建版本 " + created, Toast.LENGTH_LONG).show()
+            }
+        )
+        return
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         DownloadTopBar(
             tab = tab,
@@ -140,7 +149,11 @@ fun DownloadsScreen(
         Box(modifier = Modifier.weight(1f)) {
             val kind = tab.type
             if (kind == null) {
-                VersionTab(state = manifestState, onReload = { manifestReload++ })
+                VersionTab(
+                    state = manifestState,
+                    onReload = { manifestReload++ },
+                    onSelect = { installFor = it }
+                )
             } else {
                 // key(kind)：切分类时整棵子树重建，滚动位置/关键词/结果都不串台。
                 key(kind, target?.id) {
@@ -260,147 +273,23 @@ private sealed interface ManifestUiState {
     data class Ready(val manifest: VersionManifest, val fromCache: Boolean) : ManifestUiState
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun VersionTab(state: ManifestUiState, onReload: () -> Unit) {
-    val context = LocalContext.current
-    var selected by remember { mutableStateOf<VersionEntry?>(null) }
-    var install by remember { mutableStateOf<InstallUi?>(null) }
-    var installJob by remember { mutableStateOf<Job?>(null) }
-    var result by remember { mutableStateOf<InstallReport?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
-    fun startInstall(version: VersionEntry) {
-        selected = null
-        install = InstallUi(stage = "准备", done = 0, total = 0, current = "")
-        installJob = scope.launch {
-            try {
-                val outcome = VersionInstaller.install(
-                    versionId = version.id,
-                    versionUrl = version.url,
-                    rootDir = context.filesDir,
-                    assetsDir = File(context.filesDir, "assets"),
-                    onStage = { stage -> install = install?.copy(stage = stage) },
-                    onFileProgress = { done, total, current ->
-                        install = install?.copy(done = done, total = total, current = current)
-                    }
-                )
-                outcome.onSuccess { result = it }.onFailure { error = it.message ?: "安装失败" }
-            } catch (e: CancellationException) {
-                // 已下到 .part 的文件保留，重新点安装会断点续传。
-                error = "安装已取消；已经下载的文件会保留，重新安装会继续。"
-                throw e
-            } finally {
-                install = null
-                installJob = null
-            }
-        }
-    }
-
+private fun VersionTab(
+    state: ManifestUiState,
+    onReload: () -> Unit,
+    onSelect: (VersionEntry) -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         when (val snapshot = state) {
             is ManifestUiState.Loading -> LoadingBlock()
             is ManifestUiState.Error -> ErrorBlock(snapshot.message, onReload)
             is ManifestUiState.Ready -> VersionList(
                 state = snapshot,
-                onSelect = { selected = it }
+                onSelect = onSelect
             )
         }
     }
-
-    selected?.let { version ->
-        AlertDialog(
-            onDismissRequest = { selected = null },
-            title = { Text(version.id) },
-            text = {
-                Text(
-                    "类型：" + typeLabel(version.type) + "\n" +
-                        "发布时间：" + version.releaseTime + "\n\n" +
-                        "安装会下载客户端 jar、libraries、asset index 与全部 resources 到应用私有目录；" +
-                        "启动参数由启动器按 version JSON 组装，不依赖外部组件。"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { startInstall(version) }) { Text("安装") }
-            },
-            dismissButton = {
-                TextButton(onClick = { selected = null }) { Text("取消") }
-            }
-        )
-    }
-
-    install?.let { ui ->
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("正在安装") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(ui.stage, style = MaterialTheme.typography.bodyMedium)
-                    if (ui.total > 0) {
-                        LinearProgressIndicator(
-                            progress = { ui.done.toFloat() / ui.total.toFloat() },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            ui.done.toString() + " / " + ui.total + " 个文件",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (ui.current.isNotBlank()) {
-                        Text(
-                            ui.current,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { installJob?.cancel() }) { Text("取消") }
-            }
-        )
-    }
-
-    result?.let { report ->
-        AlertDialog(
-            onDismissRequest = { result = null },
-            title = { Text(if (report.ok) "安装完成" else "有文件下载失败") },
-            text = {
-                if (report.ok) {
-                    Text("共 " + report.totalFiles + " 个文件，已落到：\n" + report.versionDir.absolutePath)
-                } else {
-                    Text(
-                        report.failed.take(8).joinToString("\n") { pair ->
-                            pair.first + "：" + pair.second
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { result = null }) { Text("好") }
-            }
-        )
-    }
-
-    error?.let { message ->
-        AlertDialog(
-            onDismissRequest = { error = null },
-            title = { Text("安装失败") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { error = null }) { Text("知道了") }
-            }
-        )
-    }
 }
-
-private data class InstallUi(
-    val stage: String,
-    val done: Int,
-    val total: Int,
-    val current: String
-)
 
 @Composable
 private fun LoadingBlock() {

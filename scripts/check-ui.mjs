@@ -152,6 +152,28 @@ must('地图走 worldgen', modrinth, /MAP\("mod", "worldgen"\)/,
 must('下载页搜索框不用浮动 label', downloads, /placeholder = \{ Text\("搜版本号/,
   'label 会额外占 16dp 并让输入框长到 72dp，改用 placeholder');
 
+// —— 下载页：点版本进安装页（PCL 式安装预览）——
+const versionInstall = read('app/src/main/java/dev/mineport/launcher/ui/downloads/VersionInstallScreen.kt');
+must('点版本进安装页', downloads, /if \(pending != null\) \{\s*VersionInstallScreen\(/,
+  '版本行点了要进安装页，不是直接弹确认框');
+must('安装页有版本名输入', versionInstall, /BasicTextField\([\s\S]{0,900}?"版本名称"/,
+  '要能改版本名（做进预览卡里，省横屏高度）');
+must('安装页列 Minecraft 本体', versionInstall, /title = "Minecraft"/, '清单第一行是本体');
+must('安装页可选 Fabric', versionInstall, /title = "Fabric"/, 'Fabric 行可选 loader 版本');
+must('安装页 Forge 明确未支持', versionInstall, /title = "Forge"[\s\S]{0,160}?暂未支持/,
+  'Forge 要显式说没接，不能装作能装');
+must('安装页列 Fabric 版本', versionInstall, /FabricLoaderInstaller\.listLoaders\(/,
+  'loader 版本要从 Fabric meta 拉，不能用默认值糊过去');
+must('安装页开始安装按钮', versionInstall, /Text\(if \(busy\) "安装中…" else "开始安装"\)/,
+  '底栏要有开始安装');
+must('安装页先装原版再装加载器', versionInstall,
+  /if \(!vanillaJson\.isFile\)[\s\S]{0,1200}?FabricLoaderInstaller\.install\(/,
+  '原版没装要先装本体，再装 Fabric');
+must('安装页落成实例', versionInstall, /container\.instanceStore\.upsert\(instance\)/,
+  '装完要建版本记录，否则下载页目标里看不到');
+must('安装页跳过已装原版', versionInstall, /versions\/\$\{version\.id\}\/\$\{version\.id\}\.json/,
+  '已经装过原版时不该重复下 200MB');
+
 // —— 更多页 ——
 must('更多页版本管理', more, /"版本管理"/, '更多页要有版本管理入口');
 must('更多页诊断入口', more, /"诊断与日志"/, '更多页要有诊断入口');
