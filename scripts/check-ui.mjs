@@ -337,7 +337,7 @@ must('data 坐标只算路径', forgeInstaller, /fun resolveDataVars\(/, 'PATCHE
 must('args 里的输入才下载', forgeInstaller, /if \(a\.startsWith\("\["\) && a\.endsWith\("\]"\)\) need\(/, 'mcp_config 的 mappings zip 只出现在 args 里');
 must('Central 回退', forgeInstaller, /CENTRAL_MAVEN = "https:\/\/repo1\.maven\.org\/maven2\/"/, 'guava/commons-io 只在 Central');
 must('校验打补丁结果', forgeInstaller, /staged\.profile\.data\["PATCHED_SHA"\]/, '静默产出坏 jar 是最难查的失败模式');
-must('processor 失败即停', forgeInstaller, /check\(code == 0\)/, '后面步骤依赖前面输出');
+must('processor 失败即停', forgeInstaller, /if \(code != 0\) \{[\s\S]{0,600}?error\(/, '后面步骤依赖前面输出');
 // ---------- Forge 安装执行器（Android 侧） ----------
 const forgeJvm = read('app/src/main/java/dev/mineport/launcher/install/ForgeJvmRunner.kt');
 
@@ -366,6 +366,14 @@ must('额外参数进 options', jvmLauncher, /addAll\(spec\.extraJvmArgs\)/, '')
 must('游戏启动透传 jvmArgs', gameActivity, /extraJvmArgs = plan\.jvmArgs/, '');
 must('patched jar 落到版本目录', forgeInstaller, /versions\/\$id"\).apply \{ mkdirs\(\) \}[\s\S]{0,700}?versionJar/, 'MinecraftLauncher 只认 versions/<id>/<id>.jar');
 must('安装 JVM 抄 Forge 的 jvm 参数', forgeJvm, /override fun attach\(staged: ForgeInstaller\.Staged\)/, '装完同一台 JVM 要能跑 Forge');
+// ---------- Forge 安装诊断 ----------
+must('processor 带序号', forgeInstaller, /data class ProcessorRun\([\s\S]{0,120}?val index: Int/, '日志文件按序号分开');
+must('失败时带输出尾部', forgeInstaller, /fun logTail\(index: Int\): String\? = null/, '实现方决定能不能给');
+must('输出尾部拼进报错', forgeInstaller, /--- 输出尾部 ---/, '退出码本身没法诊断');
+must('每个 processor 一份日志', forgeJvm, /forge-processor-" \+ job\.index/, 'jni_bridge 只写异常文本，分开存才不会互相覆盖');
+must('Forge 装完提示重启', versionInstall, /onDone\(instance\.name, loader == Loader\.FORGE\)/, '安装占用了进程内 JVM');
+must('下载页说清为什么重启', downloads, /请划掉本应用重进/, '');
+
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

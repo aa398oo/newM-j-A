@@ -203,6 +203,13 @@ add('UX-21 拖动不触发展开', /OWNER_BALL -> if \(cancelled\)/.test(codeOnl
 add('UX-21 取消手势不展开', /OWNER_BALL -> if \(cancelled\) clearBallDrag\(\) else settleBall\(\)/.test(codeOnly(host)),
   'CANCEL 是手势作废：抹掉临时位移，既不展开也不吸附');
 
+add('Forge processor 可在同一 JVM 连跑', /std::set<std::string> g_launchedClasses/.test(codeOnly(jni)),
+  'Forge 安装要跑 6 个 processor，全局一次性会让第 2 个就失败');
+add('同一 mainClass 仍只允许跑一次', /if \(g_launchedClasses\.count\(name\) != 0\)/.test(codeOnly(jni)),
+  'B9 的状态污染保护不能丢：同一个类跑两次必然出问题');
+add('不再有全局一次性开关', !/g_mainConsumed/.test(codeOnly(jni)),
+  '旧的 atomic<bool> 已由按类名集合取代');
+
 const failed = checks.filter((c) => !c.ok);
 for (const c of checks) {
   console.log((c.ok ? '  OK   ' : ' FAIL  ') + c.name + '  —  ' + c.detail);

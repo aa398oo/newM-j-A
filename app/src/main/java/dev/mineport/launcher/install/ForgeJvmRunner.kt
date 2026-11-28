@@ -57,7 +57,19 @@ class ForgeJvmRunner(
         if (!started) startJvm()
         failure?.let { throw IllegalStateException(it) }
         Log.i(TAG, "processor ${job.mainClass} args=" + job.args.size)
-        return JvmLauncher.runMainClass(job.mainClass, job.args.toTypedArray(), null)
+        // 让 jni_bridge 把 main 的异常文本落到这个文件：processor 的 stdout 抓不到，
+        // 但「main threw: <异常栈>」已经足够区分参数错与缺类。
+        val log = File(rootDir, "logs").apply { mkdirs() }
+            .resolve("forge-processor-" + job.index + ".log")
+        return JvmLauncher.runMainClass(job.mainClass, job.args.toTypedArray(), log.absolutePath)
+    }
+
+    override fun logTail(index: Int): String? {
+        val log = File(rootDir, "logs/forge-processor-$index.log")
+        if (!log.isFile) return null
+        return runCatching {
+            log.readLines().takeLast(LOG_TAIL_LINES).joinToString("\n").take(LOG_TAIL_CHARS)
+        }.getOrNull()
     }
 
     private fun startJvm() {
@@ -110,5 +122,8 @@ class ForgeJvmRunner(
 
     private companion object {
         const val TAG = "ForgeJvmRunner"
+        /** 报错里带的输出尾部：够看异常栈，又不会被对话框撑爆。 */
+        const val LOG_TAIL_LINES = 24
+        const val LOG_TAIL_CHARS = 2400
     }
 }

@@ -29,6 +29,7 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -52,8 +53,14 @@ extern "C" jobject mineportHostSurface();
 namespace {
 
 std::mutex g_mutex;
-// B9：main 只允许消费一次（同一 JVM 二次跑 main 必然状态污染）。
-std::atomic<bool> g_mainConsumed{false};
+// B9：同一个 mainClass 在一个 JVM 里只允许消费一次（二次跑 main 必然状态污染）。
+//
+// 早先这里是「整个进程只允许一次」，但 Forge 安装要在同一 JVM 里依次跑 6 个
+// processor（installertools / jarsplitter / FART / binarypatcher 的 main），
+// 全局一次性会从第 2 个开始直接失败。改成按类名记：同一个类拒绝第二次，
+// 不同的类放行——装完 Forge 立刻进游戏（BootstrapLauncher）也走这条。
+std::mutex g_launchedMutex;
+std::set<std::string> g_launchedClasses;
 void* g_libjvm = nullptr;
 JavaVM* g_vm = nullptr;
 // 加载主类（net.minecraft.client.main.Main）的 ClassLoader。MC 的类都在它下面，
@@ -943,14 +950,18 @@ Java_dev_mineport_launcher_jvm_JvmLauncher_nativeInitializeHooks(
 extern "C" JNIEXPORT jint JNICALL
 Java_dev_mineport_launcher_jvm_JvmLauncher_nativeRunMainClass(
         JNIEnv* callerEnv, jclass, jstring className, jobjectArray args, jstring outputPath) {
-    // B9：同一个 JVM 只能消费一次 main。第二次进入会得到已经跑过 main 的 VM，
-    // 表现为各种莫名其妙的 NoClassDefFoundError / 状态残留，不如直接拒绝并让上层重启进程。
-    if (g_mainConsumed.exchange(true)) {
-        return -4;
-    }
     // 先把参数复制成 C++ 字符串：只借用 ART env 读 Java 字符串。
     const std::string name = toStd(callerEnv, className);
     const std::string outPath = outputPath != nullptr ? toStd(callerEnv, outputPath) : "";
+    {
+        std::lock_guard<std::mutex> lock(g_launchedMutex);
+        if (g_launchedClasses.count(name) != 0) {
+            LOGE("main 已跑过，拒绝重复调用：%s", name.c_str());
+            g_lastError = "该主类的 main 已在本 JVM 里执行过：" + name;
+            return -4;
+        }
+        g_launchedClasses.insert(name);
+    }
     std::vector<std::string> argStrings;
     const jsize count = args != nullptr ? callerEnv->GetArrayLength(args) : 0;
     argStrings.reserve(static_cast<size_t>(count));

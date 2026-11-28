@@ -79,7 +79,12 @@ fun VersionInstallScreen(
     container: AppContainer,
     version: VersionEntry,
     onBack: () -> Unit,
-    onDone: (String) -> Unit
+    /**
+     * @param name 新版本的名字
+     * @param needsRestart 装的是 Forge 时为 true：安装用掉了进程内那台 JVM，
+     *   它的 `-Dfcl.game.dir` 等属性停在安装目录上，只有重启进程后才能进游戏。
+     */
+    onDone: (String, Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -189,7 +194,7 @@ fun VersionInstallScreen(
                     memoryMB = container.deviceProfile.recommendedMemoryMB
                 )
                 container.instanceStore.upsert(instance)
-                onDone(instance.name)
+                onDone(instance.name, loader == Loader.FORGE)
             } catch (e: CancellationException) {
                 throw e
             } finally {

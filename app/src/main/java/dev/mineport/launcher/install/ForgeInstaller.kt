@@ -71,6 +71,8 @@ object ForgeInstaller {
 
     /** 一个待执行的 processor。 */
     data class ProcessorRun(
+        /** 在 client 侧执行序列里的序号（0 起）；日志文件名用它区分。 */
+        val index: Int,
         val mainClass: String,
         val classPath: List<File>,
         val args: List<String>
@@ -229,7 +231,7 @@ object ForgeInstaller {
             }
 
             val args = p["args"]?.jsonArray?.map { substitute(it.jsonPrimitive.content, vars, librariesDir) } ?: emptyList()
-            runs.add(ProcessorRun(mainClass = mainClass, classPath = cp, args = args))
+            runs.add(ProcessorRun(index = runs.size, mainClass = mainClass, classPath = cp, args = args))
         }
         return runs
     }
@@ -388,7 +390,18 @@ object ForgeInstaller {
         for (run in staged.runs) {
             onStage("processor ${++i}/${staged.runs.size}：${run.mainClass}")
             val code = runner.run(run)
-            check(code == 0) { "processor 失败（退出码 $code）：${run.mainClass}" }
+            if (code != 0) {
+                // 退出码本身没法诊断：installertools 的参数错、FART 的 NoClassDefFoundError
+                // 都只是「非 0」。实现方若把 main 的输出落过盘，就把尾部带出来。
+                val tail = runner.logTail(run.index)
+                error(
+                    buildString {
+                        append("processor 失败（退出码 $code）：").append(run.mainClass)
+                        append("\n参数：").append(run.describe())
+                        if (!tail.isNullOrBlank()) append("\n--- 输出尾部 ---\n").append(tail)
+                    }
+                )
+            }
         }
     }
 
@@ -404,6 +417,9 @@ object ForgeInstaller {
          * JVM 一个进程只能建一次，参数错过就补不回来了。
          */
         fun attach(staged: Staged) {}
+
+        /** 某个 processor 的输出尾部；没落盘就返回 null。 */
+        fun logTail(index: Int): String? = null
     }
 
     /**
