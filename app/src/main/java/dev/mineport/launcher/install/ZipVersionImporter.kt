@@ -10,7 +10,7 @@ import java.util.zip.ZipInputStream
  * 从 .zip 整合包导入版本目录。
  *
  * 只处理包含 `versions/<id>/<id>.json` 的标准布局（Modrinth / CurseForge 整合包、
- * 以及手工打包的版本）；不处理 overrides/ 与 mods/，模组仍走实例里的「安装模组」。
+ * 以及手工打包的版本）；不处理 overrides/ 与 mods/，模组仍走版本里的「安装模组」。
  */
 object ZipVersionImporter {
 

@@ -65,7 +65,7 @@ fun SettingsScreen(container: AppContainer) {
             EnterFromBottom(0) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("新建实例的默认渲染后端", style = MaterialTheme.typography.titleMedium)
+                        Text("新建版本的默认渲染后端", style = MaterialTheme.typography.titleMedium)
                         Text(
                             "自动 = 按机型推荐（" + profile.recommendedBackend.backend.uppercase() + "）",
                             style = MaterialTheme.typography.bodySmall

@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import dev.mineport.launcher.input.GameAction
+import dev.mineport.launcher.input.MovePad
 import kotlin.math.atan2
 import kotlin.math.hypot
 
@@ -26,6 +27,9 @@ class GameHostLayout @JvmOverloads constructor(
 
     var wheelView: View? = null
     var gameView: View? = null
+
+    /** 左侧浮动摇杆（UX-21）。由 GameActivity 注入；为空时左半屏仍按原逻辑注入鼠标。 */
+    var movePad: MovePad? = null
 
     /** 轮盘动作回调：true=按下（持续），false=松开。 */
     var onWheelAction: ((GameAction, Boolean) -> Unit)? = null
@@ -52,6 +56,10 @@ class GameHostLayout @JvmOverloads constructor(
                     owners.put(id, OWNER_WHEEL)
                     wheelIndex.put(id, idx)
                     if (idx >= 0) onWheelAction?.invoke(actions[idx], true)
+                } else if (x < width / 2f && movePad != null) {
+                    // 左半屏 = 移动摇杆（浮动：按在哪，基座就出现在哪）
+                    owners.put(id, OWNER_MOVE_PAD)
+                    movePad?.down(x, y)
                 } else {
                     owners.put(id, OWNER_GAME)
                     injector.pointerDown(id, x, y)
@@ -63,30 +71,36 @@ class GameHostLayout @JvmOverloads constructor(
                     val id = ev.getPointerId(i)
                     val x = ev.getX(i)
                     val y = ev.getY(i)
-                    if (owners.get(id, OWNER_GAME) == OWNER_WHEEL) {
-                        val idx = pickWheelIndex(x, y)
-                        val old = wheelIndex.get(id, -1)
-                        if (idx != old) {
-                            if (old >= 0) onWheelAction?.invoke(actions[old], false)
-                            if (idx >= 0) onWheelAction?.invoke(actions[idx], true)
-                            wheelIndex.put(id, idx)
+                    when (owners.get(id, OWNER_GAME)) {
+                        OWNER_WHEEL -> {
+                            val idx = pickWheelIndex(x, y)
+                            val old = wheelIndex.get(id, -1)
+                            if (idx != old) {
+                                if (old >= 0) onWheelAction?.invoke(actions[old], false)
+                                if (idx >= 0) onWheelAction?.invoke(actions[idx], true)
+                                wheelIndex.put(id, idx)
+                            }
                         }
-                    } else {
-                        injector.pointerMove(id, x, y)
+                        OWNER_MOVE_PAD -> movePad?.move(x, y)
+                        else -> injector.pointerMove(id, x, y)
                     }
                 }
             }
 
             MotionEvent.ACTION_POINTER_UP -> {
                 val i = ev.actionIndex
-                releaseWheelPointer(ev.getPointerId(i))
-                injector.pointerUp(ev.getPointerId(i))
-                owners.delete(ev.getPointerId(i))
+                val id = ev.getPointerId(i)
+                if (owners.get(id, OWNER_GAME) == OWNER_MOVE_PAD) movePad?.up()
+                releaseWheelPointer(id)
+                injector.pointerUp(id)
+                owners.delete(id)
             }
 
             MotionEvent.ACTION_UP -> {
-                releaseWheelPointer(ev.getPointerId(0))
-                injector.pointerUp(ev.getPointerId(0))
+                val id = ev.getPointerId(0)
+                if (owners.get(id, OWNER_GAME) == OWNER_MOVE_PAD) movePad?.up()
+                releaseWheelPointer(id)
+                injector.pointerUp(id)
                 owners.clear()
                 wheelIndex.clear()
             }
@@ -98,6 +112,7 @@ class GameHostLayout @JvmOverloads constructor(
                 }
                 wheelIndex.clear()
                 owners.clear()
+                movePad?.up()
                 injector.cancelAll()
             }
         }
@@ -150,6 +165,9 @@ class GameHostLayout @JvmOverloads constructor(
     private companion object {
         const val OWNER_GAME = 0
         const val OWNER_WHEEL = 1
+
+        /** 左半屏浮动摇杆（UX-21）。 */
+        const val OWNER_MOVE_PAD = 2
     }
 }
 

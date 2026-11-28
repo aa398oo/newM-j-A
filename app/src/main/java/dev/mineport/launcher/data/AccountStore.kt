@@ -35,7 +35,7 @@ enum class AccountType {
  * 离线账号只需要 [name]（uuid 由名字派生，与原版离线模式一致）；
  * 微软账号额外持有 [uuid] / [accessToken] / [refreshToken] / [expiresAtEpochMs]。
  *
- * **注意**：阶段一先把令牌以明文存进 filesDir/accounts.json（与实例同一套存储），
+ * **注意**：阶段一先把令牌以明文存进 filesDir/accounts.json（与版本同一套存储），
  * 后续需要用 Android Keystore 对 refreshToken 做加密封装（见台账 P2-01 待办）。
  */
 @Serializable
@@ -72,7 +72,7 @@ data class Account(
 
 /**
  * 账号清单的持久化。与 [InstanceStore] 同一套思路：单 JSON 文件 + StateFlow。
- * 首次启动时若没有任何账号，自动建一个离线账号（沿用实例里的默认玩家名）。
+ * 首次启动时若没有任何账号，自动建一个离线账号（沿用版本里的默认玩家名）。
  */
 class AccountStore(context: Context) {
 
@@ -87,7 +87,7 @@ class AccountStore(context: Context) {
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
     val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
 
-    /** 当前选中的账号 id；空表示沿用实例里的 playerName。 */
+    /** 当前选中的账号 id；空表示沿用版本里的 playerName。 */
     private val _selectedId = MutableStateFlow<String?>(null)
     val selectedId: StateFlow<String?> = _selectedId.asStateFlow()
 

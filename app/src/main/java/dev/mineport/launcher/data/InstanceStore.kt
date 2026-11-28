@@ -13,8 +13,8 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 /**
- * 实例清单的持久化。用单个 JSON 文件而不是数据库：
- * 实例数量在几十个量级，读写整表足够快，也便于用户手工备份。
+ * 版本清单的持久化。用单个 JSON 文件而不是数据库：
+ * 版本数量在几十个量级，读写整表足够快，也便于用户手工备份。
  */
 class InstanceStore(context: Context) {
 
@@ -44,7 +44,7 @@ class InstanceStore(context: Context) {
 
     /**
      * 进程启动时同步读一次。:game 是独立进程，GameActivity 在 onCreate 里
-     * 就要拿到实例（决定 Java 版本、内存、渲染后端），等不了 IO 协程；
+     * 就要拿到版本（决定 Java 版本、内存、渲染后端），等不了 IO 协程；
      * instances.json 只有几 KB，主线程读一次的代价可以接受。
      */
     fun loadBlocking() {

@@ -141,7 +141,7 @@ fun InstancesScreen(container: AppContainer) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("实例") },
+                title = { Text("版本") },
                 actions = {
                     TextButton(onClick = { importVersionLauncher.launch(null) }) { Text("导入目录") }
                     TextButton(onClick = { importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }) {
@@ -157,7 +157,7 @@ fun InstancesScreen(container: AppContainer) {
                 modifier = Modifier.pressScale(fabSource),
                 interactionSource = fabSource
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "新建实例")
+                Icon(Icons.Filled.Add, contentDescription = "新建版本")
             }
         }
     ) { padding ->
@@ -169,8 +169,8 @@ fun InstancesScreen(container: AppContainer) {
                 item {
                     EmptyState(
                         icon = Icons.Filled.Add,
-                        title = "还没有实例",
-                        hint = "每个实例是一份独立的游戏目录：版本、加载器、模组互不干扰。\n先在「下载」里装一个版本，或用右下角 + 手动新建。"
+                        title = "还没有版本",
+                        hint = "每个版本是一份独立的游戏目录：版本、加载器、模组互不干扰。\n先在「下载」里装一个版本，或用右下角 + 手动新建。"
                     )
                 }
             }
@@ -246,11 +246,11 @@ fun InstancesScreen(container: AppContainer) {
     pendingDelete?.let { instance ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除实例") },
+            title = { Text("删除版本") },
             text = {
                 Text(
                     "确定删除「" + instance.name + "」？\n\n" +
-                        "只删除实例配置，游戏目录（" + instance.gameDirName + "）里的存档与模组会保留。"
+                        "只删除版本配置，游戏目录（" + instance.gameDirName + "）里的存档与模组会保留。"
                 )
             },
             confirmButton = {
@@ -303,7 +303,7 @@ fun InstancesScreen(container: AppContainer) {
     }
 }
 
-/** 实例设置：渲染后端、内存、模组加载器；模组入口在加载器选好后可用。 */
+/** 版本设置：渲染后端、内存、模组加载器；模组入口在加载器选好后可用。 */
 @Composable
 private fun InstanceSettingsDialog(
     instance: GameInstance,
@@ -439,7 +439,7 @@ private fun InstanceSettingsDialog(
                     }
                     if (loader != Loader.FABRIC) {
                         Text(
-                            "Iris 只能装在 Fabric 实例上：请先把上面的加载器切到 Fabric 并安装。",
+                            "Iris 只能装在 Fabric 版本上：请先把上面的加载器切到 Fabric 并安装。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -597,7 +597,7 @@ private fun InstanceSettingsDialog(
                         ) { Text(if (copied) "已复制" else "复制") }
                     }
                     Text(
-                        "对方在「实例 → 短码导入」里输入即可复刻配置。跨设备分享需要短码服务，本地码只在本机有效。",
+                        "对方在「版本 → 短码导入」里输入即可复刻配置。跨设备分享需要短码服务，本地码只在本机有效。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -622,7 +622,7 @@ private fun InstanceSettingsDialog(
     )
 }
 
-/** 从 6 位短码复刻实例配置。跨设备前先把 [lookup] 换成远端查询即可。 */
+/** 从 6 位短码复刻版本配置。跨设备前先把 [lookup] 换成远端查询即可。 */
 @Composable
 private fun ImportCodeDialog(
     lookup: (String) -> ShareConfig?,
@@ -652,7 +652,7 @@ private fun ImportCodeDialog(
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
                 Text(
-                    "短码由对方在「实例设置 → 分享」里生成；只带版本与配置引用，不传游戏文件。",
+                    "短码由对方在「版本设置 → 分享」里生成；只带版本与配置引用，不传游戏文件。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -685,12 +685,12 @@ private fun CreateInstanceDialog(
     onDismiss: () -> Unit,
     onCreate: (GameInstance) -> Unit
 ) {
-    var name by remember { mutableStateOf("新的实例") }
+    var name by remember { mutableStateOf("新的版本") }
     var version by remember { mutableStateOf("1.20.1") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建实例") },
+        title = { Text("新建版本") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -706,7 +706,7 @@ private fun CreateInstanceDialog(
                     singleLine = true
                 )
                 Text(
-                    "内存默认 " + suggestedMemory + " MB，点实例卡片可调整内存与渲染后端。",
+                    "内存默认 " + suggestedMemory + " MB，点版本卡片可调整内存与渲染后端。",
                     style = MaterialTheme.typography.bodySmall
                 )
             }

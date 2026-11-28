@@ -20,7 +20,7 @@ class MineportApplication : Application() {
         super.onCreate()
         CrashRecorder.install(this)
         container = AppContainer(this)
-        // 独立进程（:game）里没有界面的初始化顺序，实例清单必须同步就绪。
+        // 独立进程（:game）里没有界面的初始化顺序，版本清单必须同步就绪。
         container.instanceStore.loadBlocking()
         // 账号决定启动参数（名字/uuid/令牌），同样必须同步就绪。
         container.accountStore.loadBlocking()

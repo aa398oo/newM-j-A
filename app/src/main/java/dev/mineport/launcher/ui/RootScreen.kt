@@ -38,7 +38,7 @@ private data class Tab(val route: String, val label: String, val icon: androidx.
 
 private val tabs = listOf(
     Tab("home", "首页", Icons.Filled.Home),
-    Tab("instances", "实例", Icons.Filled.Apps),
+    Tab("instances", "版本", Icons.Filled.Apps),
     Tab("downloads", "下载", Icons.Filled.Download),
     Tab("settings", "设置", Icons.Filled.Settings)
 )

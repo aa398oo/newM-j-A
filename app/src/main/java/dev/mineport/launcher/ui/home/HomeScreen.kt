@@ -84,7 +84,7 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f).pressScale(manageSource),
                         interactionSource = manageSource
                     ) {
-                        Text("管理实例")
+                        Text("版本管理")
                     }
                 }
             }
@@ -92,7 +92,7 @@ fun HomeScreen(
 
         item {
             EnterFromBottom(4) {
-                Text("最近实例", style = MaterialTheme.typography.titleMedium)
+                Text("最近游玩", style = MaterialTheme.typography.titleMedium)
             }
         }
 
@@ -100,7 +100,7 @@ fun HomeScreen(
             item {
                 EnterFromBottom(5) {
                     Text(
-                        "还没有实例。先去「下载」装一个原版版本，或在「实例」里手动新建。",
+                        "还没有版本。先去「下载」装一个原版版本，或在「版本」里手动新建。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -148,7 +148,7 @@ private fun BackendCard(profile: DeviceProfile) {
             )
             Text(recommendation.reason, style = MaterialTheme.typography.bodySmall)
             Text(
-                "可在实例设置里覆盖。Zink 需要设备能加载 Turnip 驱动，失败会自动回退 GL4ES。",
+                "可在版本设置里覆盖。Zink 需要设备能加载 Turnip 驱动，失败会自动回退 GL4ES。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

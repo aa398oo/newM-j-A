@@ -45,14 +45,14 @@ import java.util.Locale
  * 模组搜索与安装。
  *
  * 走 Modrinth 公开 API：搜索 → 选第一个匹配版本 → 自动补 required 前置。
- * 原版实例不能装模组（没有加载器会直接忽略 mods 目录），所以先提示去实例设置
+ * 原版版本不能装模组（没有加载器会直接忽略 mods 目录），所以先提示去版本设置
  * 把加载器改掉；加载器的实际安装（Fabric/Forge installer）是下一步。
  */
 @Composable
 fun ModsDialog(
     instance: GameInstance,
     onDismiss: () -> Unit,
-    /** 原版实例点「去装加载器」时回调：关闭本对话框并打开实例设置。 */
+    /** 原版版本点「去装加载器」时回调：关闭本对话框并打开版本设置。 */
     onOpenSettings: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -101,14 +101,14 @@ fun ModsDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!supported) {
                     Text(
-                        "这是原版实例，游戏不会读取 mods 目录。先在实例设置里把加载器改成 " +
+                        "这是原版版本，游戏不会读取 mods 目录。先在版本设置里把加载器改成 " +
                             "Fabric / Forge / NeoForge / Quilt，再回来搜索。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (onOpenSettings != null) {
                         Button(onClick = { onDismiss(); onOpenSettings() }) {
-                            Text("去实例设置装加载器")
+                            Text("去版本设置装加载器")
                         }
                     }
                 } else {

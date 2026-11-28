@@ -19,7 +19,7 @@ object ShaderInstaller {
     /** Modrinth 上 Iris Shaders 的 slug。 */
     private const val IRIS_SLUG = "iris"
 
-    /** 把 Iris 装进实例的 mods 目录；返回写入的文件数（含 Fabric API 等 required 依赖）。 */
+    /** 把 Iris 装进版本的 mods 目录；返回写入的文件数（含 Fabric API 等 required 依赖）。 */
     suspend fun installIris(
         gameVersion: String,
         modsDir: File,
@@ -39,11 +39,11 @@ object ShaderInstaller {
             }
     }
 
-    /** 实例的 mods 目录。 */
+    /** 版本的 mods 目录。 */
     fun modsDir(filesDir: File, gameDirName: String): File =
         File(filesDir, "instances/$gameDirName/mods")
 
-    /** 实例的 shaderpacks 目录（Iris 从这里读光影包）。 */
+    /** 版本的 shaderpacks 目录（Iris 从这里读光影包）。 */
     fun shaderPacksDir(filesDir: File, gameDirName: String): File =
         File(filesDir, "instances/$gameDirName/shaderpacks")
 

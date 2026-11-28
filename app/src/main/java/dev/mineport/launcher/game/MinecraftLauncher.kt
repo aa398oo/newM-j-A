@@ -61,7 +61,7 @@ object MinecraftLauncher {
             val libraries = chain.reversed().flatMap { it.libraries }.distinctBy { it.name }
 
             val classPath = mutableListOf<File>()
-            // 版本 jar：优先自身目录，其次沿链找（Fabric 实例目录里没有原版 jar），
+            // 版本 jar：优先自身目录，其次沿链找（Fabric 版本目录里没有原版 jar），
             // 最后用合并 profile 的 jar 字段指回原版版本 id。
             val jarIds = (listOf(versionId) + chain.map { it.id } + chain.mapNotNull { it.jar }).distinct()
             val jar = jarIds
@@ -146,7 +146,7 @@ object MinecraftLauncher {
         }
 
         val assetIndexName = chain.firstNotNullOfOrNull { it.assetIndex?.id } ?: "legacy"
-        // 账号优先：有登录账号就用它的名字/uuid/令牌，否则退回实例里的 playerName。
+        // 账号优先：有登录账号就用它的名字/uuid/令牌，否则退回版本里的 playerName。
         val effectiveName = account?.name?.takeIf { it.isNotBlank() } ?: playerName
         val authUuid = account?.uuid?.replace("-", "")?.takeIf { it.isNotBlank() } ?: "0"
         val authToken = account?.accessToken?.takeIf { it.isNotBlank() } ?: "0"

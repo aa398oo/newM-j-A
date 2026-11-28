@@ -153,6 +153,16 @@ class GameActivity : ComponentActivity() {
             }
         )
         host.wheelView = wheel
+
+        // 左侧浮动摇杆（UX-21）：左半屏任意位置按下出现基座，拖动控向，松手消失。
+        // 用全限定名避免再加 import；半径 140dp，死区由 MovePad 内部按 15% 处理。
+        val movePad = dev.mineport.launcher.input.MovePad((140 * density)) { key, pressed ->
+            NativeRenderer.nativeSendKey(
+                key,
+                if (pressed) NativeRenderer.KEY_PRESS else NativeRenderer.KEY_RELEASE,
+            )
+        }
+        host.movePad = movePad
         setContentView(host)
 
         // 先把窗口像素尺寸同步给 GLFW/CallbackBridge：Android 上 Surface 尺寸就是
