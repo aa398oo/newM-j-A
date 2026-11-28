@@ -485,6 +485,16 @@ must('版本行显示已装标记', downloads,
 must('装完重算标记', downloads,
   /onDone = \{ created ->[\s\S]{0,160}?versionsTick\+\+[\s\S]{0,80}?Toast/,
   '不重算的话刚装完还是显示未装');
+
+// ── 实例卡显示「最后游玩时间」 ──────────────────────────────────────────
+must('实例卡显示最后游玩时间',
+  instances,
+  /lastPlayedEpochMs > 0L[\s\S]{0,200}?relativeTime\(instance\.lastPlayedEpochMs\)/,
+  '没有时间的话，版本多了就分不清哪个是刚玩过的');
+must('相对时间只到天，超过一周给日期',
+  instances,
+  /diff < 7L \* 86_400_000L[\s\S]{0,220}?SimpleDateFormat\("yyyy-MM-dd"/,
+  '一个月前写「32 天前」不如直接给日期');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

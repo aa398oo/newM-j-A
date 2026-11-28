@@ -207,8 +207,14 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                instance.memoryMB.toString() + " MB · Java " +
-                                    javaMajorFor(instance.minecraftVersion),
+                                buildString {
+                                    append(instance.memoryMB).append(" MB · Java ")
+                                        .append(javaMajorFor(instance.minecraftVersion))
+                                    // 玩过的才显示时间：从没玩过的版本写「未玩过」只是噪音。
+                                    if (instance.lastPlayedEpochMs > 0L) {
+                                        append(" · ").append(relativeTime(instance.lastPlayedEpochMs))
+                                    }
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -767,6 +773,21 @@ private fun CreateInstanceDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
+}
+
+
+/** 版本列表里的「多久之前」。只到天，超过一周给日期。 */
+private fun relativeTime(epochMs: Long): String {
+    val diff = System.currentTimeMillis() - epochMs
+    return when {
+        diff < 0L -> "刚刚"
+        diff < 60_000L -> "刚玩过"
+        diff < 3_600_000L -> (diff / 60_000L).toString() + " 分钟前"
+        diff < 86_400_000L -> (diff / 3_600_000L).toString() + " 小时前"
+        diff < 7L * 86_400_000L -> (diff / 86_400_000L).toString() + " 天前"
+        else -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            .format(java.util.Date(epochMs))
+    }
 }
 
 private fun loaderOf(id: String): Loader =
