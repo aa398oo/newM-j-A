@@ -166,11 +166,11 @@ must('安装页列 Fabric 版本', versionInstall, /FabricLoaderInstaller\.listL
 must('安装页开始安装按钮', versionInstall, /Text\(if \(busy\) "安装中…" else "开始安装"\)/,
   '底栏要有开始安装');
 must('安装页先装原版再装加载器', versionInstall,
-  /if \(!vanillaJson\.isFile\)[\s\S]{0,3200}?FabricLoaderInstaller\.install\(/,
+  /if \(!vanillaComplete\(context\.filesDir, version\.id\)\)[\s\S]{0,3200}?FabricLoaderInstaller\.install\(/,
   '原版没装要先装本体，再装 Fabric');
 must('安装页落成实例', versionInstall, /container\.instanceStore\.upsert\(instance\)/,
   '装完要建版本记录，否则下载页目标里看不到');
-must('安装页跳过已装原版', versionInstall, /versions\/\$\{version\.id\}\/\$\{version\.id\}\.json/,
+must('安装页跳过已装原版', versionInstall, /vanillaComplete\(context\.filesDir, version\.id\)/,
   '已经装过原版时不该重复下 200MB');
 
 // —— 更多页 ——
@@ -495,6 +495,14 @@ must('相对时间只到天，超过一周给日期',
   instances,
   /diff < 7L \* 86_400_000L[\s\S]{0,220}?SimpleDateFormat\("yyyy-MM-dd"/,
   '一个月前写「32 天前」不如直接给日期');
+must('原版装完才跳过安装',
+  versionInstall,
+  /if \(!vanillaComplete\(context\.filesDir, version\.id\)\)/,
+  '只看 <id>.json 会把下到一半的版本当成装完了');
+must('完整判据含 client jar 与 assets index',
+  versionInstall,
+  /if \(!File\(dir, "\$versionId\.jar"\)\.isFile\) return false[\s\S]{0,400}?assets\/indexes\/\$indexId\.json/,
+  '缺 jar 或缺 indexes 进游戏就是黑方块或直接崩');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

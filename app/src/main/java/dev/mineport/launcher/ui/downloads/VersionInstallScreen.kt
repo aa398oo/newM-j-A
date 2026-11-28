@@ -44,20 +44,50 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.AppContainer
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.data.GameInstance
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.data.Loader
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.data.javaMajorFor
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.download.VersionEntry
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.install.FabricLoaderInstaller
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.install.ForgeInstaller
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.install.ForgeJvmRunner
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.install.VersionInstaller
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.jvm.JvmLauncher
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.jvm.RuntimeStager
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.ui.components.EmptyState
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.ui.motion.LocalMotionStage
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.ui.motion.MotionIntent
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import dev.mineport.launcher.ui.motion.PixelDotsLoading
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -102,9 +132,9 @@ fun VersionInstallScreen(
         scope.launch {
             error = null
             try {
-                // 1) 原版本体：已装过就跳过（比如之前只装了原版、这次来补加载器）。
-                val vanillaJson = File(context.filesDir, "versions/${version.id}/${version.id}.json")
-                if (!vanillaJson.isFile) {
+                // 1) 原版本体：真的装完才跳过（比如之前只装了原版、这次来补加载器）。
+                //    不能只看 `<id>.json`——它是安装第一步就写的，中途被杀会留下半套。
+                if (!vanillaComplete(context.filesDir, version.id)) {
                     stage = "安装原版 ${version.id}"
                     val outcome = VersionInstaller.install(
                         versionId = version.id,
@@ -580,3 +610,25 @@ private fun FabricLoaderPicker(
         }
     }
 }
+
+/**
+ * 原版本体是否真的装完。
+ *
+ * `<id>.json` 是安装第一步写的，之后才下 client jar 与 assets，所以只看它会把
+ * 「下到一半被杀」的版本当成已装，进游戏直接崩在缺 jar / 缺资源上。
+ * 这里四个产物齐了才算完：版本 json、client jar、asset_index.json、assets/indexes/<id>.json。
+ */
+private fun vanillaComplete(filesDir: File, versionId: String): Boolean {
+    val dir = File(filesDir, "versions/$versionId")
+    if (!File(dir, "$versionId.json").isFile) return false
+    if (!File(dir, "$versionId.jar").isFile) return false
+    val indexFile = File(dir, "asset_index.json")
+    if (!indexFile.isFile) return false
+    val indexId = runCatching {
+        kotlinx.serialization.json.Json.parseToJsonElement(indexFile.readText())
+            .jsonObject["id"]?.jsonPrimitive?.content
+    }.getOrNull()
+    if (indexId.isNullOrBlank()) return true
+    return File(filesDir, "assets/indexes/$indexId.json").isFile
+}
+
