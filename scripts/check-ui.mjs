@@ -472,6 +472,19 @@ must('旧版目录可兜底找回', forgeInstaller,
 must('启动前兜底一次', gameActivity,
   /resolveInstalledId\(filesDir, instance\.minecraftVersion\) \?: launchVersionId/,
   '只有目录不存在时才兜底，正常路径不受影响');
+// ---------- 版本列表标「已装」 ----------
+must('版本列表算已装集合', downloads,
+  /val installedVersionIds: Set<String> = remember\(versionsTick\)/,
+  '装了哪些版本只能扫 versions/，清单里没有这个信息');
+must('已装按 json 存在判定', downloads,
+  /File\(it, it\.name \+ "\.json"\)\.isFile/,
+  '只有子目录没有 json 是半成品，不算已装');
+must('版本行显示已装标记', downloads,
+  /if \(version\.id in installed\) \{[\s\S]{0,400}?"已装"/,
+  '列表里认不出已装版本，用户会重复点进去');
+must('装完重算标记', downloads,
+  /onDone = \{ created ->[\s\S]{0,160}?versionsTick\+\+[\s\S]{0,80}?Toast/,
+  '不重算的话刚装完还是显示未装');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

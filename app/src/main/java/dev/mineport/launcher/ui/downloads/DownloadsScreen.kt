@@ -83,8 +83,18 @@ fun DownloadsScreen(
     var tab by remember { mutableStateOf(DownloadTab.VERSION) }
     var targetId by remember { mutableStateOf<String?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    val appContext = LocalContext.current
     // 非空时内容区让给安装页（返回后回到列表，列表状态还在）。
     var installFor by remember { mutableStateOf<VersionEntry?>(null) }
+    // 装完/返回后要重算「已装」标记：目录刚建出来，不重算列表里还是「未装」。
+    var versionsTick by remember { mutableStateOf(0) }
+    val installedVersionIds: Set<String> = remember(versionsTick) {
+        val dir = File(appContext.filesDir, "versions")
+        dir.listFiles()
+            ?.filter { it.isDirectory && File(it, it.name + ".json").isFile }
+            ?.mapTo(HashSet()) { it.name }
+            ?: emptySet()
+    }
 
     // 默认装到最近玩的版本；版本被删了就退回第一个。
     LaunchedEffect(instances) {
@@ -96,7 +106,7 @@ fun DownloadsScreen(
 
     // 版本清单状态放在这一层：「最新 26.3 · 927 个版本」要显示在标题行里，
     // 把状态藏进列表内部会让顶部多出一整行统计，横屏下这 40dp 就是一条版本。
-    val appContext = LocalContext.current
+
     var manifestState by remember { mutableStateOf<ManifestUiState>(ManifestUiState.Loading) }
     var manifestReload by remember { mutableStateOf(0) }
     LaunchedEffect(manifestReload) {
@@ -121,9 +131,10 @@ fun DownloadsScreen(
         VersionInstallScreen(
             container = container,
             version = pending,
-            onBack = { installFor = null },
+            onBack = { installFor = null; versionsTick++ },
             onDone = { created ->
                 installFor = null
+                versionsTick++
                 Toast.makeText(appContext, "已创建版本 $created", Toast.LENGTH_LONG).show()
             }
         )
@@ -151,6 +162,7 @@ fun DownloadsScreen(
             if (kind == null) {
                 VersionTab(
                     state = manifestState,
+                    installed = installedVersionIds,
                     onReload = { manifestReload++ },
                     onSelect = { installFor = it }
                 )
@@ -276,6 +288,7 @@ private sealed interface ManifestUiState {
 @Composable
 private fun VersionTab(
     state: ManifestUiState,
+    installed: Set<String>,
     onReload: () -> Unit,
     onSelect: (VersionEntry) -> Unit
 ) {
@@ -285,6 +298,7 @@ private fun VersionTab(
             is ManifestUiState.Error -> ErrorBlock(snapshot.message, onReload)
             is ManifestUiState.Ready -> VersionList(
                 state = snapshot,
+                installed = installed,
                 onSelect = onSelect
             )
         }
@@ -325,6 +339,7 @@ private fun ErrorBlock(message: String, onRetry: () -> Unit) {
 @Composable
 private fun VersionList(
     state: ManifestUiState.Ready,
+    installed: Set<String>,
     onSelect: (VersionEntry) -> Unit
 ) {
     val manifest = state.manifest
@@ -398,6 +413,19 @@ private fun VersionList(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.weight(1f)
                     )
+                    if (version.id in installed) {
+                        // 「已装」比「进去看看再装一次」重要：列表里一眼能认出来。
+                        Text(
+                            "已装",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(
                         typeLabel(version.type) + " · " + version.releaseTime.take(10),
                         style = MaterialTheme.typography.bodySmall,
