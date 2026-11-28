@@ -1,5 +1,7 @@
 package dev.mineport.launcher.ui.personalize
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +29,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -37,6 +40,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +55,8 @@ import dev.mineport.launcher.AppContainer
 import dev.mineport.launcher.input.PadPrefs
 import dev.mineport.launcher.ui.motion.EnterFromBottom
 import dev.mineport.launcher.ui.prefs.Prefs
+import dev.mineport.launcher.ui.theme.ThemePackStore
+import kotlinx.coroutines.launch
 
 /**
  * 个性化页（UX-18）：四组外观设置 + 右侧实时预览。
@@ -107,6 +113,18 @@ fun PersonalizeScreen(container: AppContainer) {
                             onSize = { hudSizeDp = it; padPrefs.actionPadSizeDp = it },
                             onAlpha = { hudAlphaPct = it; padPrefs.actionPadAlpha = it / 100f },
                             onCorner = { hudLeft = it; padPrefs.setActionPadCorner(it) }
+                        )
+                    }
+                    EnterFromBottom(4) {
+                        ThemePackCard(
+                            prefs = prefs,
+                            padPrefs = padPrefs,
+                            onApplied = {
+                                // 主题包可能改了 HUD 三项，镜像要跟着刷新，否则 chip 还停在旧值。
+                                hudSizeDp = padPrefs.actionPadSizeDp
+                                hudAlphaPct = padPrefs.actionPadAlpha * 100f
+                                hudLeft = padPrefs.isActionPadLeft()
+                            }
                         )
                     }
                 }
@@ -166,46 +184,67 @@ private fun AccentCard(prefs: Prefs) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Prefs.ACCENTS.forEach { name ->
                 val color = Prefs.accentColor(name)
-                val selected = prefs.accent == name
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (selected) color.copy(alpha = 0.16f) else Color.Transparent)
-                            .clickable { prefs.applyAccent(name) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(if (selected) 28.dp else 24.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .border(
-                                    width = if (selected) 2.dp else 0.dp,
-                                    color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (selected) {
-                                Icon(
-                                    Icons.Filled.Check,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        Prefs.accentLabel(name),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                // 有自定义色时，预设都不算选中——否则界面上会同时出现两个勾。
+                val selected = prefs.accentCustom == null && prefs.accent == name
+                AccentDot(
+                    color = color,
+                    label = Prefs.accentLabel(name),
+                    selected = selected,
+                    onClick = { prefs.applyAccent(name) }
+                )
+            }
+            // 主题包带进来的任意色：给一个「自定义」位，点它保留自定义色，
+            // 想回到预设就点上面任意一个圆点（applyAccent 会清掉自定义）。
+            prefs.accentCustom?.let { hex ->
+                AccentDot(
+                    color = Prefs.parseHex(hex) ?: MaterialTheme.colorScheme.primary,
+                    label = "自定义",
+                    selected = true,
+                    onClick = { prefs.applyAccentCustom(hex) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccentDot(color: Color, label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(if (selected) color.copy(alpha = 0.16f) else Color.Transparent)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(if (selected) 28.dp else 24.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(
+                        width = if (selected) 2.dp else 0.dp,
+                        color = if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
         }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -264,10 +303,73 @@ private fun HudCard(
     }
 }
 
+/**
+ * 主题包（UX-19）：导出 / 导入 `.mptheme`。
+ *
+ * 走 SAF（系统文件选择器），不写死应用私有目录：导出能落到「下载」，
+ * 导入能直接从聊天软件 / 网盘选，不用先让用户找文件路径。
+ */
+@Composable
+private fun ThemePackCard(prefs: Prefs, padPrefs: PadPrefs, onApplied: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(ThemePackStore.MIME)
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            ThemePackStore.write(prefs, padPrefs, context.contentResolver, uri)
+                .onSuccess { status = "已导出：" + (uri.lastPathSegment ?: "主题包") }
+                .onFailure { status = "导出失败：" + (it.message ?: "未知错误") }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            ThemePackStore.read(context.contentResolver, uri)
+                .mapCatching { pack ->
+                    ThemePackStore.problem(pack)?.let { reason -> error(reason) }
+                    ThemePackStore.apply(pack, prefs, padPrefs)
+                    pack
+                }
+                .onSuccess {
+                    status = "已应用：" + it.name
+                    onApplied()
+                }
+                .onFailure { status = "导入失败：" + (it.message ?: "未知错误") }
+        }
+    }
+
+    SectionCard("主题包", "导出当前外观分享，或导入别人的 .mptheme（zip 里是 theme.json）。") {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { exportLauncher.launch("mineport-theme" + ThemePackStore.EXTENSION) }
+            ) { Text("导出 .mptheme") }
+            OutlinedButton(
+                onClick = {
+                    importLauncher.launch(
+                        arrayOf(ThemePackStore.MIME, "application/octet-stream", "*/*")
+                    )
+                }
+            ) { Text("导入 .mptheme") }
+        }
+        status?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 /** 实时预览：直接摆真实的主题色块与组件，改了哪一项这里立刻能看到对比。 */
 @Composable
-private fun PreviewCard() {
-    val cs = MaterialTheme.colorScheme
+private fun PreviewCard() {    val cs = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = cs.surface),

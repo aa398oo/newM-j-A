@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val systemDark = isSystemInDarkTheme()
             val dark = prefs.darkTheme(systemDark)
-            val accent = Prefs.accentColor(prefs.accent)
+            val accent = Prefs.accentColor(prefs.accent, prefs.accentCustom)
             CompositionLocalProvider(LocalAnimationsEnabled provides prefs.animations) {
                 MineportTheme(darkTheme = dark, accent = accent) {
                     RootScreen()

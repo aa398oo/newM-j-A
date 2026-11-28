@@ -95,7 +95,7 @@ must('UX-18 默认浅色', prefs, /THEME_LIGHT\) \?: THEME_LIGHT/, '默认值应
 must('UX-18 Prefs 进程级单例', app, /val uiPrefs: Prefs = Prefs\(app\)/, 'AppContainer 里放 uiPrefs');
 must('UX-18 主题接到 Activity', main, /prefs\.darkTheme\(systemDark\)/,
   'MainActivity 用 Prefs 决定 darkTheme');
-must('UX-18 主色接到 Activity', main, /Prefs\.accentColor\(prefs\.accent\)/,
+must('UX-18 主色接到 Activity', main, /Prefs\.accentColor\(prefs\.accent/,
   'MainActivity 用 Prefs.accentColor 取主色');
 must('UX-18 动效开关下发', main, /LocalAnimationsEnabled provides prefs\.animations/,
   'CompositionLocalProvider(LocalAnimationsEnabled provides ...)');
@@ -238,6 +238,25 @@ must('追加按 project_id 去重', contentTab, /val known = hits\.mapTo\(HashSe
   '服务端排序会抖，同一项目可能跨页重复');
 must('到底有提示', contentTab, /"共 " \+ hits\.size \+ " 条，到底了"/, '没有更多时要明确收尾，不能一直转圈');
 must('换关键词重置列表', contentTab, /hits = emptyList\(\)[\s\S]{0,400}?searchProjects\(/, '新搜索必须清空旧页，否则 offset 会错位');
+
+// —— UX-19 .mptheme 主题包 ——
+const themePack = read('app/src/main/java/dev/mineport/launcher/ui/theme/ThemePack.kt');
+must('主题包模型', themePack, /@Serializable[\s\S]{0,80}?data class ThemePack\(/, 'UX-19：主题包是一个可序列化的清单');
+must('主题包扩展名', themePack, /const val EXTENSION = "\.mptheme"/, '对外约定 .mptheme');
+must('主题包是 zip', themePack, /ZipOutputStream\([\s\S]{0,4000}?ZipInputStream\(/, '以后要塞预览图/字体，json 直接当文件不够');
+must('清单文件名 theme.json', themePack, /private const val MANIFEST = "theme\.json"/, '包内约定');
+must('允许子目录清单', themePack, /substringAfterLast\('\/'\) == MANIFEST/, '别人打包常多套一层文件夹');
+must('主题包校验', themePack, /fun problem\(pack: ThemePack\): String\?/, '格式版本/尺寸/透明度越界要拦');
+must('主题包应用写 HUD', themePack, /padPrefs\.actionPadSizeDp = pack\.padSizeDp[\s\S]{0,120}?padPrefs\.actionPadAlpha = pack\.padAlpha/,
+  '主题包一起带轮盘外观');
+must('导出走 SAF', personalize, /ActivityResultContracts\.CreateDocument\(ThemePackStore\.MIME\)/, '不写死私有目录，用户能选保存位置');
+must('导入走 SAF', personalize, /ActivityResultContracts\.OpenDocument\(\)/, '能直接从聊天软件/网盘选');
+must('导入后刷新 HUD 镜像', personalize, /onApplied = \{[\s\S]{0,300}?hudSizeDp = padPrefs\.actionPadSizeDp/, 'PadPrefs 没有 Compose 状态，要手动同步');
+must('自定义主色解析', prefs, /fun parseHex\(hex: String\): androidx\.compose\.ui\.graphics\.Color\?/, '主题包可以带任意颜色，不限于五个预设');
+must('自定义主色回写', prefs, /fun toHex\(color: androidx\.compose\.ui\.graphics\.Color\): String/, '导出时要把当前色写成 #RRGGBB');
+must('选预设清掉自定义', prefs, /accentCustom = null[\s\S]{0,120}?remove\(KEY_ACCENT_CUSTOM\)/, '否则个性化页会同时出现两个选中');
+must('MainActivity 传自定义色', main, /Prefs\.accentColor\(prefs\.accent, prefs\.accentCustom\)/, '自定义色要真的进主题');
+must('个性化页有自定义色位', personalize, /prefs\.accentCustom\?\.let \{ hex ->/, '导入任意色后要能看到并保留它');
 
 let failed = 0;
 for (const check of checks) {
