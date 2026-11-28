@@ -66,14 +66,20 @@ fun CommandBlock(
  * 尺寸关系（a = 竖棱长）：宽 = 2·0.866a，高 = 1.5a。整套坐标以画布中心为原点，
  * 所以放进任何 size 都会居中。
  */
-private fun DrawScope.drawCommandBlock(accent: Color, material: Float, flash: Float) {
-    val unit = size.minDimension
+internal fun DrawScope.drawCommandBlock(
+    accent: Color,
+    material: Float,
+    flash: Float,
+    center: Offset = Offset(size.width / 2f, size.height / 2f),
+    scale: Float = 1f
+) {
+    val unit = size.minDimension * scale
     if (unit <= 0f) return
     val a = unit * 0.55f           // 竖棱长
     val halfW = a * 0.866f         // 等距投影的水平半宽
     val halfH = a * 0.5f           // 顶面菱形的半高
-    val cx = size.width / 2f
-    val cy = size.height / 2f
+    val cx = center.x
+    val cy = center.y
     // 让 bbox（高 1.5a）在画布内垂直居中：顶面下顶点的 y。
     val px = cx
     val py = cy - a * 0.25f

@@ -1,6 +1,7 @@
 package dev.mineport.launcher.ui.home
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,7 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -53,6 +56,7 @@ import dev.mineport.launcher.game.GameActivity
 import dev.mineport.launcher.ui.components.EmptyState
 import dev.mineport.launcher.ui.components.PageHeader
 import dev.mineport.launcher.ui.motion.EnterFromBottom
+import dev.mineport.launcher.ui.motion.drawCommandBlock
 import dev.mineport.launcher.ui.motion.pressScale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -213,6 +217,21 @@ private fun Cover(instance: GameInstance) {
                 )
             )
     ) {
+        // 等距命令方块：UX-22 的视觉锚点，首页封面先把它立起来（跟 rail 底部同一个绘制函数，
+        // 只是这里 scale 小、material 固定 0.55 让它带一点主色）。
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(0.92f)
+        ) {
+            drawCommandBlock(
+                accent = accent,
+                material = 0.55f,
+                flash = 0f,
+                center = Offset(size.width * 0.74f, size.height * 0.44f),
+                scale = 0.62f
+            )
+        }
         Text(
             text = instance.minecraftVersion,
             modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),

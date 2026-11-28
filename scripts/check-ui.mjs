@@ -270,7 +270,7 @@ must('白闪用关键帧', motionStage, /keyframes \{[\s\S]{0,300}?220/, '只有
 must('关动效直接落终态', motionStage, /if \(reduceMotion\) \{[\s\S]{0,200}?snapTo/, '同一个入口，不做第二套逻辑');
 must('逻辑阶段只做展示', motionStage, /var stage by mutableStateOf\(MotionStageState\.Idle\)/, 'State 只表达阶段，动画值走 Animatable');
 must('事件枚举', motionStage, /enum class MotionIntent \{[\s\S]{0,200}?TabImpact/, 'T1 先接导航撞击');
-must('方块纯 Canvas 绘制', commandBlock, /fun DrawScope\.drawCommandBlock\(accent: Color, material: Float, flash: Float\)/, '禁止切图，40dp→160dp 不糊');
+must('方块纯 Canvas 绘制', commandBlock, /fun DrawScope\.drawCommandBlock\([\s\S]{0,200}?accent: Color,[\s\S]{0,60}?material: Float,[\s\S]{0,60}?flash: Float/, '禁止切图，40dp→160dp 不糊');
 must('等距三面', commandBlock, /val top = Path\(\)\.apply \{[\s\S]{0,600}?val right = Path\(\)\.apply/, '顶面菱形 + 左右侧面');
 must('颜色跟主色', commandBlock, /lerp\(base, accent, material \* 0\.8f\)/, '唤醒程度由材质值控制');
 must('动画只进 graphicsLayer', commandBlock, /graphicsLayer \{[\s\S]{0,300}?stage\.blockScale\.value/, '绘制阶段读 state，不触发重组');
@@ -383,6 +383,19 @@ must('runner 可接收实例目录与身份', forgeJvm,
   /private val gameDir: File = File\(rootDir, "instances\/forge-install"\)[\s\S]{0,200}?private val playerName: String/,
   '默认值只是兜底，真实调用要传实例的');
 
+// ---------- UX-16 封面：等距命令方块 ----------
+must('封面内立等距方块', home,
+  /fun Cover\([\s\S]{0,2200}?drawCommandBlock\(/,
+  '首页封面要复用 UX-22 的方块绘制，不是再画一套');
+must('方块绘制可跨文件复用', commandBlock,
+  /internal fun DrawScope\.drawCommandBlock\(/,
+  'private 只能自己用，首页封面要能调');
+must('方块绘制支持定位与缩放', commandBlock,
+  /center: Offset = Offset\(size\.width \/ 2f, size\.height \/ 2f\)[\s\S]{0,120}?scale: Float = 1f/,
+  '默认值要能覆盖全尺寸居中，封面才能摆在右下');
+must('封面方块带主色材质', home,
+  /material = 0\.55f[\s\S]{0,160}?scale = 0\.62f/,
+  'material=0.55 让方块带一半主色，跟渐变封面呼应');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
