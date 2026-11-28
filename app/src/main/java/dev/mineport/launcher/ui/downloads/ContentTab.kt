@@ -194,6 +194,29 @@ fun ContentTab(
     }
 
     val needsLoaderWarning = kind.needsLoader && instance.loader == Loader.VANILLA
+    // 横屏内容区只有 ~424x300dp，头部每多一行就等于少一条结果。
+    // 目标 / 警告 / 条数 / 已装全挤进一行；有警告时整行转 error 色。
+    val headerSummary = buildString {
+        append("目标 ")
+        append(instance.minecraftVersion)
+        append(" · ")
+        append(instance.loader.displayName)
+        append(
+            when {
+                needsLoaderWarning -> "（mods 不生效）"
+                !kind.needsLoader -> ""
+                loaderFilter == null -> "（不过滤加载器）"
+                else -> "（按 " + instance.loader.displayName + " 过滤）"
+            }
+        )
+        append(" · 共 ")
+        append(hits.size)
+        append(" 条")
+        if (installedHere > 0) {
+            append(" · 已装 ")
+            append(installedHere)
+        }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -211,37 +234,21 @@ fun ContentTab(
                     textStyle = MaterialTheme.typography.bodyMedium,
                     shape = MaterialTheme.shapes.medium
                 )
-                if (needsLoaderWarning) {
-                    Text(
-                        "这个版本是原版（没有加载器），装进 mods 不会生效。光影/材质不受影响。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                Text(
-                    "目标：" + instance.minecraftVersion + " · " + instance.loader.displayName + " · " + when {
-                        !kind.needsLoader -> "不挑加载器"
-                        loaderFilter == null -> "不过滤加载器（原版）"
-                        else -> "按 " + instance.loader.displayName + " 过滤"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
-                )
-                // 已装的内容只在「当前这一页结果」里数：Modrinth 的搜索没有 installed 维度，
-                // 与其再发一次请求，不如把已装标记就地汇总成一个开关。
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 3.dp, bottom = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "共 " + hits.size + " 条" + if (installedHere > 0) " · 已装 " + installedHere else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        headerSummary,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (needsLoaderWarning) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.weight(1f))
                     if (installedHere > 0) {
+                        Spacer(Modifier.width(8.dp))
                         val on = onlyInstalled
                         Text(
                             text = if (on) "只看已装 ✓" else "只看已装",

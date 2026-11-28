@@ -186,6 +186,17 @@ object JvmLauncher {
         }
 
         val options = buildList {
+            // Android 上起 HotSpot 的三件必做项，缺任何一个 JNI_CreateJavaVM 都返回 -1：
+            // 1) -Xshare:off：Android 的 /system 下没有 classes.jsa，CDS 映射失败会直接让创建失败；
+            // 2) -Dos.arch：Android 报的是 arm64，HotSpot 的 os::arch 只认 aarch64；
+            // 3) -Duser.home / -Duser.dir：HotSpot 初始化要读/写当前目录，默认的 "/" 不可写。
+            add("-Xshare:off")
+            add("-Dos.name=Linux")
+            add("-Dos.arch=" + if (System.getProperty("os.arch") == "arm64") "aarch64" else System.getProperty("os.arch"))
+            add("-Dos.version=" + System.getProperty("os.version"))
+            add("-Duser.home=" + spec.runtimeRoot.parentFile.absolutePath)
+            add("-Duser.dir=" + spec.gameDir.absolutePath)
+            add("-Djna.tmpdir=" + File(spec.gameDir, "tmp").apply { mkdirs() }.absolutePath)
             add("-Djava.home=" + spec.runtimeRoot.absolutePath)
             add("-Djava.class.path=" + classPath.joinToString(":") { it.absolutePath })
             add("-Djava.library.path=" + libraryPath)

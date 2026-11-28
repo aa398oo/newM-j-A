@@ -249,6 +249,14 @@ object MinecraftLauncher {
         )
         return raw
             .map { line -> replacements.fold(line) { acc, (key, value) -> acc.replace(key, value) } }
+            // JNI_CreateJavaVM 只认 VM 选项；-cp/-p/--add-modules/--add-opens 这类
+            // 启动器选项传进去会被忽略（ignoreUnrecognized=true）甚至让创建失败，
+            // 所以这里先按前缀白名单滤一遍。
+            .filter { arg ->
+                arg.startsWith("-D") || arg.startsWith("-X") || arg.startsWith("-javaagent") ||
+                    arg.startsWith("-agentlib") || arg.startsWith("-agentpath") ||
+                    arg.startsWith("-verbose")
+            }
             .filterNot { it.contains("\${") }
     }
 

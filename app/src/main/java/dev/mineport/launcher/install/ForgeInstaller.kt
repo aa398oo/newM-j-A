@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -131,21 +132,26 @@ object ForgeInstaller {
                 zip.getInputStream(e).bufferedReader(Charsets.UTF_8).use { it.readText() }
             } ?: error("installer 里没有 version.json")
 
-            val profileJson = JSON.parseToJsonElement(profileText).jsonObject
-            val versionJson = JSON.parseToJsonElement(versionText).jsonObject
+            val profileJson = JSON.parseToJsonElement(profileText).obj() ?: error("install_profile.json 不是对象")
+            val versionJson = JSON.parseToJsonElement(versionText).obj() ?: error("version.json 不是对象")
 
             val data = LinkedHashMap<String, DataVar>()
-            profileJson["data"]?.jsonObject?.forEach { (key, value) ->
-                val obj = value.jsonObject
-                data[key] = DataVar(
-                    client = obj["client"]?.jsonPrimitive?.content.orEmpty(),
-                    server = obj["server"]?.jsonPrimitive?.content.orEmpty()
-                )
+            // 有的 profile 把 data 的值写成纯字符串而不是 {client,server}，这里两种都吃。
+            profileJson["data"].obj()?.forEach { (key, value) ->
+                val obj = value.obj()
+                data[key] = if (obj == null) {
+                    DataVar(client = value.str().orEmpty(), server = "")
+                } else {
+                    DataVar(
+                        client = obj["client"].str().orEmpty(),
+                        server = obj["server"].str().orEmpty()
+                    )
+                }
             }
 
-            val processors = profileJson["processors"]?.jsonArray?.map { it.jsonObject } ?: emptyList()
+            val processors = profileJson["processors"]?.jsonArray?.mapNotNull { it as? JsonObject } ?: emptyList()
             val libraryNames = profileJson["libraries"]?.jsonArray
-                ?.mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.content } ?: emptyList()
+                ?.mapNotNull { (it as? JsonObject)?.get("name").str() } ?: emptyList()
 
             val profile = InstallProfile(
                 spec = profileJson["spec"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1,
@@ -218,19 +224,19 @@ object ForgeInstaller {
     ): List<ProcessorRun> {
         val runs = ArrayList<ProcessorRun>()
         for (p in profile.processors) {
-            val sides = p["sides"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList()
+            val sides = p["sides"]?.jsonArray?.mapNotNull { it.str() } ?: emptyList()
             if (!sideAllows(sides, "client")) continue
 
-            val jarCoord = p["jar"]?.jsonPrimitive?.content ?: continue
+            val jarCoord = p["jar"].str() ?: continue
             val mainClass = mainClassOf(jarCoord) ?: continue
 
             val cp = ArrayList<File>()
             parseMaven(jarCoord)?.let { cp.add(it.resolve(librariesDir)) }
             p["classpath"]?.jsonArray?.forEach { el ->
-                parseMaven(el.jsonPrimitive.content)?.let { cp.add(it.resolve(librariesDir)) }
+                el.str()?.let { raw -> parseMaven(raw)?.let { cp.add(it.resolve(librariesDir)) } }
             }
 
-            val args = p["args"]?.jsonArray?.map { substitute(it.jsonPrimitive.content, vars, librariesDir) } ?: emptyList()
+            val args = p["args"]?.jsonArray?.mapNotNull { it.str() }?.map { substitute(it, vars, librariesDir) } ?: emptyList()
             runs.add(ProcessorRun(index = runs.size, mainClass = mainClass, classPath = cp, args = args))
         }
         return runs
@@ -241,14 +247,19 @@ object ForgeInstaller {
         sides.isEmpty() || sides.contains(side) || sides.contains("")
 
     /** version.json 里 `libraries[].name` + `downloads.artifact`。 */
+    /** profile 里同一个字段可能是对象也可能是裸字符串，这两个扩展统一收口。 */
+    private fun JsonElement?.str(): String? = (this as? JsonPrimitive)?.contentOrNull
+
+    private fun JsonElement?.obj(): JsonObject? = this as? JsonObject
+
     private fun librariesOf(json: JsonObject): List<Pair<String, String?>> {
         val out = ArrayList<Pair<String, String?>>()
         json["libraries"]?.jsonArray?.forEach { el ->
-            val lib = el.jsonObject
-            val name = lib["name"]?.jsonPrimitive?.content ?: return@forEach
-            val url = lib["downloads"]?.jsonObject
-                ?.get("artifact")?.jsonObject
-                ?.get("url")?.jsonPrimitive?.content
+            val lib = el as? JsonObject ?: return@forEach
+            val name = lib["name"].str() ?: return@forEach
+            val url = lib["downloads"].obj()
+                ?.get("artifact").obj()
+                ?.get("url").str()
             out.add(name to url)
         }
         return out
@@ -340,10 +351,10 @@ object ForgeInstaller {
             fun need(coord: String?) {
                 if (coord != null && parseMaven(coord) != null) all.putIfAbsent(coord, null)
             }
-            need(p["jar"]?.jsonPrimitive?.content)
-            p["classpath"]?.jsonArray?.forEach { need(it.jsonPrimitive.content) }
+            need(p["jar"].str())
+            p["classpath"]?.jsonArray?.forEach { need(it.str()) }
             p["args"]?.jsonArray?.forEach { el ->
-                val a = el.jsonPrimitive.content
+                val a = el.str() ?: return@forEach
                 if (a.startsWith("[") && a.endsWith("]")) need(a.substring(1, a.length - 1))
             }
         }
@@ -511,7 +522,7 @@ object ForgeInstaller {
 
     /** profile 里的官方 id，仅用于日志；目录名一律用 [loaderVersion]。 */
     fun versionId(versionJson: JsonObject): String =
-        versionJson["id"]?.jsonPrimitive?.content ?: "${SUPPORTED_MINECRAFT}-forge-${SUPPORTED_FORGE}"
+        versionJson["id"].str() ?: "${SUPPORTED_MINECRAFT}-forge-${SUPPORTED_FORGE}"
 
     /**
      * 兼容旧安装：早期版本把 profile 官方 id 当目录名（`1.20.1-forge-47.2.0`），

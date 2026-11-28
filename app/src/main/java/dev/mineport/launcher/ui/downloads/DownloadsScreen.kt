@@ -346,8 +346,14 @@ private fun VersionList(
     var query by remember { mutableStateOf("") }
     val shown = remember(manifest, query) {
         val q = normalizeVersionQuery(query)
+        // 中文输入法里 "." 是选中英标点才有的键，很多人只会打「1201」。
+        // 去掉分隔符再比一次，「1201」也能命中「1.20.1」。
+        val loose = q.filter { it.isLetterOrDigit() }
         if (q.isEmpty()) manifest.versions
-        else manifest.versions.filter { it.id.contains(q, ignoreCase = true) }
+        else manifest.versions.filter { version ->
+            version.id.contains(q, ignoreCase = true) ||
+                (loose.isNotEmpty() && version.id.filter { it.isLetterOrDigit() }.contains(loose, ignoreCase = true))
+        }
     }
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -379,7 +385,7 @@ private fun VersionList(
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("搜版本号，如 1.20.1") },
+                    placeholder = { Text("搜版本号，如 1.20.1 或 1201") },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -169,10 +170,12 @@ private fun HeroCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(Modifier.fillMaxSize()) {
-            Cover(instance)
+            // 封面吃剩余高度而不是固定 16:7：横屏可视高只有 ~375dp，
+            // 固定比例会把下面的准备度 chip 挤出屏幕。
+            Cover(instance, Modifier.weight(1f))
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -201,12 +204,12 @@ private fun HeroCard(
 }
 
 @Composable
-private fun Cover(instance: GameInstance) {
+private fun Cover(instance: GameInstance, modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.primary
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 7f)
+            .heightIn(min = 104.dp)
             .background(
                 Brush.linearGradient(
                     listOf(

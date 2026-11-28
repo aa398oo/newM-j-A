@@ -216,7 +216,9 @@ const home = read('app/src/main/java/dev/mineport/launcher/ui/home/HomeScreen.kt
 must('首页用 PageHeader', home, /PageHeader\([\s\S]{0,80}?title = "启动"/, 'UX-16：标题行与 rail 对齐');
 must('首页左右两栏', home, /HeroCard\([\s\S]{0,400}?Modifier\.weight\(1\.15f\)[\s\S]{0,400}?GalleryPane\([\s\S]{0,400}?weight\(0\.85f\)/,
   'UX-16：左主角卡 1.15、右版本画廊 0.85');
-must('首页封面 16:7', home, /aspectRatio\(16f \/ 7f\)/, '横屏封面不能太高，否则启动按钮出屏');
+must('首页封面吃剩余高度', home, /Cover\(instance, Modifier\.weight\(1f\)\)/,
+  '横屏 375dp 高：封面必须让剩余空间给按钮和准备度 chip');
+must('首页封面有最小高度', home, /heightIn\(min = 104\.dp\)/, '让完了也不能塌成一条');
 must('首页封面用主色渐变', home, /Brush\.linearGradient\(/, '不依赖网络封面图，先按主题色生成');
 must('首页加载器色块', home, /Loader\.FABRIC -> Color\(0xFFE8C9A0\)[\s\S]{0,400}?Loader\.VANILLA -> Color\(0xFFA0A8B4\)/,
   '加载器在列表里要一眼能分辨');

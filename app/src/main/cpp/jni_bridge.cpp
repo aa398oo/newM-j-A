@@ -3,6 +3,8 @@
 #include <android/log.h>
 #include <dirent.h>
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/prctl.h>
 #include <unistd.h>
 
@@ -688,10 +690,54 @@ Java_dev_mineport_launcher_jvm_JvmLauncher_nativeStartJvm(
     args.version = JNI_VERSION_1_6;
     args.nOptions = static_cast<jint>(vmOptions.size());
     args.options = vmOptions.data();
-    args.ignoreUnrecognized = JNI_FALSE;
+    // 必须为 TRUE：版本 json 的 arguments.jvm 里混着启动器专用选项（-cp、-p、
+    // --add-modules、--add-opens），这些不是 VM 选项；FALSE 时 JVM 会报
+    // "Unrecognized option: -cp" 并让 JNI_CreateJavaVM 直接返回 -1。
+    // TRUE 时它们被跳过（类路径由 -Djava.class.path 生效），VM 才能建起来。
+    args.ignoreUnrecognized = JNI_TRUE;
+
+    // 诊断：JNI_CreateJavaVM 失败时 HotSpot 会把真实原因写 stdout/stderr，
+    // 而 app 进程这两个 fd 默认指向 /dev/null。临时改指到 <tmpdir>/jvm-init.log，
+    // 调用结束（无论成败）立刻恢复，避免影响后面的 logcat。
+    std::string jvmLogPath;
+    for (auto& text : optionStrings) {
+        const std::string prefix = "-Djava.io.tmpdir=";
+        if (text.compare(0, prefix.size(), prefix) == 0) {
+            jvmLogPath = text.substr(prefix.size()) + "/jvm-init.log";
+            break;
+        }
+    }
+    int savedOut = -1;
+    int savedErr = -1;
+    if (!jvmLogPath.empty()) {
+        const size_t slash = jvmLogPath.find_last_of('/');
+        if (slash != std::string::npos) {
+            const std::string dir = jvmLogPath.substr(0, slash);
+            ::mkdir(dir.c_str(), 0777);
+        }
+        const int fd = ::open(jvmLogPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        if (fd >= 0) {
+            savedOut = ::dup(STDOUT_FILENO);
+            savedErr = ::dup(STDERR_FILENO);
+            ::dup2(fd, STDOUT_FILENO);
+            ::dup2(fd, STDERR_FILENO);
+            ::close(fd);
+            LOGI("JVM init log -> %s", jvmLogPath.c_str());
+        }
+    }
 
     JNIEnv* jvmEnv = nullptr;
     const jint created = createJavaVm(&g_vm, reinterpret_cast<void**>(&jvmEnv), &args);
+
+    if (savedOut >= 0) {
+        ::dup2(savedOut, STDOUT_FILENO);
+        ::close(savedOut);
+    }
+    if (savedErr >= 0) {
+        ::dup2(savedErr, STDERR_FILENO);
+        ::close(savedErr);
+    }
+
     if (created != JNI_OK) {
         g_lastError = "JNI_CreateJavaVM 返回 " + std::to_string(created);
         LOGE("%s", g_lastError.c_str());
