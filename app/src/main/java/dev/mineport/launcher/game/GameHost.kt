@@ -71,10 +71,23 @@ class GameHostLayout @JvmOverloads constructor(
     /** 长按判定的手抖容差：按下后位移超过它就算拖动，取消长按。 */
     private val editSlopPx: Float get() = 12f * density
 
+    /** 小球拖动的起拖阈值：比长按容差大一点，避免「点球」被轻微手抖判成拖动。 */
+    private val dragSlopPx: Float get() = 16f * density
+
     /** 正在长按的小球：pointerId / 按下坐标。 */
     private var ballPressId = -1
     private var ballPressX = 0f
     private var ballPressY = 0f
+
+    /** 小球拖动状态：按下点、最近一次拖动点、是否已超过起拖阈值。 */
+    private var ballDownX = 0f
+    private var ballDownY = 0f
+    private var ballDragX = 0f
+    private var ballDragY = 0f
+    private var ballDragging = false
+
+    /** 小球吸附落位后回调归一化坐标，宿主用它落盘（PadPrefs.actionPadBallX/Y）。 */
+    var onPadMoved: ((Float, Float) -> Unit)? = null
 
     /** 轮盘左上角的归一化位置（0..1，相对可用区域，不存绝对像素——豆包 UX-21 要求）。 */
     var padNormX = 0f
@@ -116,6 +129,25 @@ class GameHostLayout @JvmOverloads constructor(
                     val x = ev.getX(i)
                     val y = ev.getY(i)
                     when (owners.get(id, OWNER_GAME)) {
+                        OWNER_BALL -> {
+                            // 收起态按住小球：先判「拖」还是「点/长按」。
+                            if (!ballDragging &&
+                                (abs(x - ballDownX) > dragSlopPx || abs(y - ballDownY) > dragSlopPx)
+                            ) {
+                                ballDragging = true
+                                disarmBallLongPress()
+                                trace("ball: drag start")
+                            }
+                            if (ballDragging) {
+                                ballDragX = x
+                                ballDragY = y
+                                // 只动 translation，不 requestLayout：拖动时每帧改 margin 会掉帧。
+                                wheelView?.let { w ->
+                                    w.translationX = x - (w.left + w.width / 2f)
+                                    w.translationY = y - (w.top + w.height / 2f)
+                                }
+                            }
+                        }
                         OWNER_WHEEL -> {
                             val pad = actionPad
                             // 编辑态由 OWNER_EDIT 负责；收起态下的残留手指也不参与扇区判定。
@@ -161,6 +193,8 @@ class GameHostLayout @JvmOverloads constructor(
             MotionEvent.ACTION_CANCEL -> {
                 // 每根手指按自己的 owner 收尾（松槽位/松摇杆），再统一复位 FCL 输入态。
                 disarmBallLongPress()
+                ballDragging = false
+                wheelView?.let { it.translationX = 0f; it.translationY = 0f }
                 for (i in 0 until ev.pointerCount) endPointer(ev.getPointerId(i))
                 wheelIndex.clear()
                 owners.clear()
@@ -207,10 +241,14 @@ class GameHostLayout @JvmOverloads constructor(
 
         if (!pad.expanded) {
             if (dist > ballHitPx) return false
-            // 点球 = 展开；按住不动 1.5s = 进编辑（UX-21 §21.3）。
-            pad.expand()
+            // 收起态按住小球：这一指交给 OWNER_BALL，用来区分「点一下展开」「拖到边上」「长按进编辑」。
+            ballDownX = x
+            ballDownY = y
+            ballDragX = x
+            ballDragY = y
+            ballDragging = false
             armBallLongPress(id, x, y)
-            owners.put(id, OWNER_WHEEL)
+            owners.put(id, OWNER_BALL)
             wheelIndex.put(id, WHEEL_IGNORE)
             return true
         }
@@ -231,11 +269,13 @@ class GameHostLayout @JvmOverloads constructor(
         return true
     }
 
-    /** 单指收尾：松摇杆 / 松轮盘槽位 / 松注入的鼠标键，都只做自己那一份。 */
-    private fun endPointer(id: Int) {
+    /** 单指收尾：松摇杆 / 松轮盘槽位 / 收小球手势，都只做自己那一份。 */
+    private fun endPointer(id: Int, cancelled: Boolean = false) {
         if (ballPressId == id) disarmBallLongPress()
         when (owners.get(id, OWNER_GAME)) {
             OWNER_MOVE_PAD -> movePad?.up()
+            // CANCEL 是「这一手势作废」：既不展开也不吸附，只把临时位移清掉。
+            OWNER_BALL -> if (cancelled) clearBallDrag() else settleBall()
             OWNER_WHEEL -> {
                 releaseWheelPointer(id)
                 actionPad?.pointerUp()
@@ -245,6 +285,50 @@ class GameHostLayout @JvmOverloads constructor(
             else -> injector.pointerUp(id)
         }
         owners.delete(id)
+    }
+
+    /** 手势作废：把拖动时的临时位移抹掉，回到上一次落位。 */
+    private fun clearBallDrag() {
+        ballDragging = false
+        wheelView?.let {
+            it.translationX = 0f
+            it.translationY = 0f
+        }
+    }
+
+    /**
+     * 小球手指离开：拖过就吸附到最近的左右边并落盘；没拖（且没进编辑）就展开轮盘。
+     *
+     * 吸附只算左右，不算上下：横屏两侧才有足够宽的「停靠位」，上下吸附会挡住画面中间。
+     */
+    private fun settleBall() {
+        val w = wheelView
+        val pad = actionPad
+        if (w == null || pad == null) {
+            ballDragging = false
+            return
+        }
+        if (ballDragging) {
+            ballDragging = false
+            val halfW = w.width / 2f
+            val halfH = w.height / 2f
+            val inset = PAD_INSET_DP * density
+            val left = inset + halfW
+            val right = width - inset - halfW
+            val targetX = if (ballDragX < width / 2f) left else right
+            val targetY = ballDragY.coerceIn(halfH + inset, height - halfH - inset)
+            val rangeY = (height - 2f * inset - w.height).coerceAtLeast(1f)
+            val normX = if (targetX <= left + 1f) 0f else 1f
+            val normY = ((targetY - halfH - inset) / rangeY).coerceIn(0f, 1f)
+            w.translationX = 0f
+            w.translationY = 0f
+            setPadPosition(normX, normY)
+            onPadMoved?.invoke(normX, normY)
+            trace("ball: settle x=" + normX + " y=" + normY)
+        } else if (pad.mode != PadMode.EDIT) {
+            pad.expand()
+            trace("ball: expand")
+        }
     }
 
     private fun releaseWheelPointer(id: Int) {
@@ -320,7 +404,7 @@ class GameHostLayout @JvmOverloads constructor(
         val ww = if (w.width > 0) w.width else lp.width
         val wh = if (w.height > 0) w.height else lp.height
         if (ww <= 0 || wh <= 0) return
-        val inset = (12 * density).toInt()
+        val inset = (PAD_INSET_DP * density).toInt()
         val availX = (width - ww - 2 * inset).coerceAtLeast(0)
         val availY = (height - wh - 2 * inset).coerceAtLeast(0)
         lp.gravity = Gravity.TOP or Gravity.START
@@ -368,8 +452,14 @@ class GameHostLayout @JvmOverloads constructor(
         /** 轮盘编辑态（长按小球 1.5s 进入）：优先级高于其它 owner。 */
         const val OWNER_EDIT = 3
 
+        /** 收起态按住小球：可能是点一下展开、拖到边上、或长按进编辑。 */
+        const val OWNER_BALL = 4
+
         /** wheelIndex 里的哨兵：这一指只用来展开/收起，全程不触发槽位动作。 */
         const val WHEEL_IGNORE = -2
+
+        /** 轮盘与屏幕边缘的固定内边距（dp）：吸附落位也用它。 */
+        const val PAD_INSET_DP = 12f
 
         /** 轮盘可视半径占外框短边的比例（和 ActionWheel / ActionPadOverlay 保持一致）。 */
         const val WHEEL_RADIUS_RATIO = 0.42f

@@ -121,8 +121,8 @@ add('UX-21 不再写死 24f 内径',
   !/innerPx\s*=\s*24f/.test(codeOnly(host)),
   'innerPx 由 centerPx（dp 换算）传入，不再写裸像素');
 add('UX-21 点球只展开不双切换',
-  /private fun claimWheel\([\s\S]{0,900}?pad\.expand\(\)[\s\S]{0,160}?return true/.test(codeOnly(host)),
-  'claimWheel 展开后立刻 return，不再落到「点中心收起」分支');
+  /if \(!pad\.expanded\) \{[\s\S]{0,400}?owners\.put\(id, OWNER_BALL\)[\s\S]{0,80}?return true/.test(codeOnly(host)),
+  'claimWheel 收起态命中小球后交给 OWNER_BALL 并立刻 return，不再落到「点中心收起」分支');
 add('UX-21 收起态不参与扇区命中',
   /!pad\.expanded\)\s*return -1/.test(codeOnly(host)),
   'pickWheelIndex 在收起态返回 -1');
@@ -184,6 +184,24 @@ add('UX-21 轮盘透明度可调', /wheel\.alpha\s*=\s*prefs\.actionPadAlpha/.te
 add('UX-21 轮盘绘制编辑态', /editing: Boolean = false/.test(codeOnly(wheel))
   && /editing -> "完成"/.test(codeOnly(wheel)),
   'ActionWheel 编辑态中心显示「完成」，改过的槽位高亮');
+
+// —— UX-21 收起球拖动吸附边缘 ——
+add('UX-21 小球拖动独立 owner', /const val OWNER_BALL = 4/.test(codeOnly(host)),
+  '收起态按住小球走 OWNER_BALL，不直接展开，才能区分点/拖/长按');
+add('UX-21 起拖阈值大于长按容差', /dragSlopPx: Float get\(\) = 16f \* density/.test(codeOnly(host)),
+  '16dp > 12dp：轻微手抖仍算点击，不会一碰就变拖动');
+add('UX-21 拖动只改 translation', /translationX = x - \(w\.left \+ w\.width \/ 2f\)/.test(codeOnly(host)),
+  '拖动时只动 translationX/Y，不逐帧 requestLayout');
+add('UX-21 松手吸附左右边', /if \(ballDragX < width \/ 2f\) left else right/.test(codeOnly(host)),
+  '离哪边近吸哪边，竖向位置保留');
+add('UX-21 吸附落盘归一化', /onPadMoved\?\.invoke\(normX, normY\)/.test(codeOnly(host))
+  && /host\.onPadMoved = \{ nx, ny ->/.test(codeOnly(activity)),
+  '吸附后回调宿主写 PadPrefs.actionPadBallX/Y，下次进游戏还在原位');
+add('UX-21 拖动不触发展开', /OWNER_BALL -> if \(cancelled\)/.test(codeOnly(host))
+  && /else if \(pad\.mode != PadMode\.EDIT\) \{[\s\S]{0,120}?pad\.expand\(\)/.test(codeOnly(host)),
+  '只有「没拖动且没进编辑」才展开');
+add('UX-21 取消手势不展开', /OWNER_BALL -> if \(cancelled\) clearBallDrag\(\) else settleBall\(\)/.test(codeOnly(host)),
+  'CANCEL 是手势作废：抹掉临时位移，既不展开也不吸附');
 
 const failed = checks.filter((c) => !c.ok);
 for (const c of checks) {

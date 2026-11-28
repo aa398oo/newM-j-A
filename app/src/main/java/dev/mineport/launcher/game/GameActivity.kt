@@ -205,6 +205,8 @@ class GameActivity : ComponentActivity() {
         // 位置存归一化坐标（默认左下角）；真正摆放由 host 在 onSizeChanged 里按可用区域算，
         // 换分辨率/旋转/分屏都不会跑到屏幕外。
         host.setPadPosition(prefs.actionPadBallX, prefs.actionPadBallY)
+        // 收起态把小球拖到边上松手 -> 吸附左右边并写回 Prefs，下次进游戏还在那儿。
+        host.onPadMoved = { nx, ny -> prefs.actionPadBallX = nx; prefs.actionPadBallY = ny }
 
         // 左侧浮动摇杆（UX-21）：左半屏任意位置按下出现基座，拖动控向，松手消失。
         // 半径来自 Prefs（默认 140dp，96–220dp），死区由 MovePad 内部按 15% 处理。
