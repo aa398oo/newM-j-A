@@ -461,7 +461,10 @@ object ForgeInstaller {
             }
         }
 
-        val id = versionId(staged.versionJson)
+        // 目录名必须与 GameInstance.loaderVersion 一致：GameActivity 拿它当 versionId
+        // 去 versions/<id>/<id>.json 找文件。profile 里的官方 id 是 1.20.1-forge-47.2.0，
+        // 直接拿来当目录名会和实例上存的 forge-47.2.0 对不上，启动时必报「未安装」。
+        val id = loaderVersion()
         val dir = File(rootDir, "versions/$id").apply { mkdirs() }
         // 把打补丁的 client jar 放到版本目录：MinecraftLauncher 找 jar 只看
         // versions/<id>/<id>.jar，而 Forge 的 -DignoreList 里写的也是
@@ -471,7 +474,11 @@ object ForgeInstaller {
             patched.copyTo(versionJar, overwrite = true)
         }
         val json = File(dir, "$id.json")
-        json.writeText(staged.versionJson.toString(), Charsets.UTF_8)
+        // 同时把 json 里的 id 也改成同一个值，免得 inheritsFrom 链里出现两个不同的 id。
+        val body = runCatching {
+            JsonObject(staged.versionJson + ("id" to JsonPrimitive(id))).toString()
+        }.getOrElse { staged.versionJson.toString() }
+        json.writeText(body, Charsets.UTF_8)
         json
     }
 
@@ -502,10 +509,20 @@ object ForgeInstaller {
     private fun profileToJson(profile: InstallProfile): JsonObject =
         JsonObject(mapOf("libraries" to JsonArray(profile.libraryNames.map { JsonPrimitive(it) })))
 
-    /** 从 version.json 取 playable 版本号（写进 `versions/<id>/<id>.json`）。 */
+    /** profile 里的官方 id，仅用于日志；目录名一律用 [loaderVersion]。 */
     fun versionId(versionJson: JsonObject): String =
         versionJson["id"]?.jsonPrimitive?.content ?: "${SUPPORTED_MINECRAFT}-forge-${SUPPORTED_FORGE}"
 
+    /**
+     * 兼容旧安装：早期版本把 profile 官方 id 当目录名（`1.20.1-forge-47.2.0`），
+     * 而实例上存的是 `forge-47.2.0`。启动前找不到目录时用它扫一遍。
+     */
+    fun resolveInstalledId(rootDir: File, minecraftVersion: String): String? {
+        val prefix = "$minecraftVersion-forge-"
+        return File(rootDir, "versions").listFiles()
+            ?.firstOrNull { it.isDirectory && it.name.startsWith(prefix) && File(it, it.name + ".json").isFile }
+            ?.name
+    }
     /** 供 [dev.mineport.launcher.data.GameInstance] 用的 loader 版本串。 */
     fun loaderVersion(): String = "forge-$SUPPORTED_FORGE"
 }

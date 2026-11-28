@@ -456,6 +456,22 @@ must('预设用预设主色而非硬编码 hex', themePack, /accent = Prefs\.ACC
 must('个性化页列预设', personalize, /ThemePackStore\.presets\(\)\.forEach/, '有预设没入口等于没做');
 must('预设先校验再应用', personalize, /val reason = ThemePackStore\.problem\(pack\)[\s\S]{0,240}?ThemePackStore\.apply\(pack, prefs, padPrefs\)/, '坏预设不能半应用');
 must('预设应用后刷新 HUD 镜像', personalize, /已应用预设：[\s\S]{0,120}?onApplied\(\)/, '轮盘尺寸/透明度改了要同步本地镜像');
+// ---------- Forge 版本目录名必须与实例记录一致 ----------
+must('Forge 目录名用 loaderVersion', forgeInstaller,
+  /val id = loaderVersion\(\)\s*\n\s*val dir = File\(rootDir, "versions\/\$id"\)/,
+  '目录名与实例上的 loaderVersion 不一致，启动时必报未安装');
+must('Forge json 的 id 同步改写', forgeInstaller,
+  /JsonPrimitive\(id\)\)\)\.toString\(\)/,
+  'inheritsFrom 链里出现两个不同 id 会让版本查找错位');
+must('安装期 JVM 也用同一 id', forgeJvm,
+  /val id = ForgeInstaller\.loaderVersion\(\)/,
+  '安装期与运行期的 ${version_name} 必须一致，否则 ignoreList 对不上');
+must('旧版目录可兜底找回', forgeInstaller,
+  /fun resolveInstalledId\(rootDir: File, minecraftVersion: String\): String\?/,
+  'alpha 期间装过的人目录名是官方 id，不能让他们卡死');
+must('启动前兜底一次', gameActivity,
+  /resolveInstalledId\(filesDir, instance\.minecraftVersion\) \?: launchVersionId/,
+  '只有目录不存在时才兜底，正常路径不受影响');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

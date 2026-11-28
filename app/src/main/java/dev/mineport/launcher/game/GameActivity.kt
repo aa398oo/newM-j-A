@@ -297,9 +297,16 @@ class GameActivity : ComponentActivity() {
         val launchVersionId = instance.loaderVersion
             ?.takeIf { instance.loader != dev.mineport.launcher.data.Loader.VANILLA }
             ?: instance.minecraftVersion
+        // 旧版 Forge 安装把 profile 官方 id 当了目录名，这里兜底找回一次。
+        val versionId = if (File(filesDir, "versions/$launchVersionId/$launchVersionId.json").isFile) {
+            launchVersionId
+        } else {
+            dev.mineport.launcher.install.ForgeInstaller
+                .resolveInstalledId(filesDir, instance.minecraftVersion) ?: launchVersionId
+        }
         val planResult = MinecraftLauncher.prepare(
             rootDir = filesDir,
-            versionId = launchVersionId,
+            versionId = versionId,
             playerName = instance.playerName,
             gameDir = gameDir,
             assetsDir = assetsDir,

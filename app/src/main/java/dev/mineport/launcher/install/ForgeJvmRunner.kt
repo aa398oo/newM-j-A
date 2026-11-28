@@ -54,7 +54,7 @@ class ForgeJvmRunner(
     override fun attach(staged: ForgeInstaller.Staged) {
         stagedJvmArgs = runCatching {
             val version = MinecraftLauncher.parseVersionJson(staged.versionJson.toString())
-            val id = ForgeInstaller.versionId(staged.versionJson)
+            val id = ForgeInstaller.loaderVersion()
             MinecraftLauncher.buildJvmArgs(listOf(version), id, File(rootDir, "libraries"))
         }.getOrElse {
             Log.w(TAG, "解析 Forge 的 jvm 参数失败：" + it.message)
