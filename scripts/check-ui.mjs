@@ -113,8 +113,10 @@ mustNot('下载页不用 TopAppBar', downloads, /TopAppBar\(/,
   '横屏可用高约 375dp，64dp 的 TopAppBar 比内容还贵，应改成一行紧凑标题');
 must('下载页头部压成一行', downloads, /headlineSmall[\s\S]{0,600}?TextButton\(onClick = onReload\)/,
   '标题 / 版本统计 / 刷新要并排在同一行');
-must('下载页列表占满剩余高度', downloads, /LazyColumn\([\s\S]{0,160}?Modifier\.weight\(1f\)/,
-  'LazyColumn 必须 weight(1f)；fillMaxSize 会把上面的头部挤出可视区');
+must('下载页整页滚动', downloads, /item\(key = "__header__"\)/,
+  '标题和搜索框要作为 LazyColumn 的第 0 项，跟版本列表一起滚走');
+must('下载页头部随滚动淡出', downloads, /graphicsLayer\s*\{[\s\S]{0,200}?alpha = headerAlpha/,
+  '头部要用 graphicsLayer 按滚动距离淡出（draw 阶段读 state，不逐帧重组）');
 must('下载页搜索框不用浮动 label', downloads, /placeholder = \{ Text\("搜版本号/,
   'label 会额外占 16dp 并让输入框长到 72dp，改用 placeholder');
 
