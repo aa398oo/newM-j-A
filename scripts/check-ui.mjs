@@ -296,11 +296,20 @@ must('齿轮扣合旋转', propOverlay, /rotate\(degrees = -45f \+ 45f \* p/, '�
 must('齿轮中心挖孔', propOverlay, /PathOperation\.Difference/, 'overlay 是透明的，挖孔不能用背景色盖');
 must('冲入用减速曲线', motionStage, /CubicBezierEasing\(0\.1f, 0\.9f, 0\.2f, 1f\)/, '前 60% 走完 90% 距离，撞前减速才有重量');
 must('撞击后道具弹开', motionStage, /propRecoil\.animateTo\(1f/, '被顶回来才有反作用力');
-must('道具用枚举而不是位图', motionStage, /enum class MotionProp \{ None, Arrow, Gear \}/, '以后加刷子/丝带只需加枚举值');
+must('道具用枚举而不是位图', motionStage, /enum class MotionProp \{ None, Arrow, Gear, Brush \}/, '以后加刷子/丝带只需加枚举值');
 must('下载页用箭头', rootScreen, /"downloads" -> stage\.play\(MotionIntent\.DownloadImpact\)/, '按 tab 分派不同道具');
 must('设置页用齿轮', rootScreen, /"settings" -> stage\.play\(MotionIntent\.SettingsImpact\)/, '设置=精密扣合，下载=暴力撞击');
 must('方块位置上报给 overlay', commandBlock, /coords\.boundsInRoot\(\)\.center/, 'overlay 要知道往哪儿飞');
 mustNot('道具不用 ImageVector', propOverlay, /ImageVector|painterResource/, '矢量图也要 Canvas 手绘');
+// ── UX-22 T4：个性化刷子 + 材质逐段显现 ─────────────────
+must('个性化页用刷子', rootScreen, /"personalize" -> stage\.play\(MotionIntent\.PersonalizeBrush\)/, '每个 tab 有专属道具，个性化=粉刷');
+must('刷子是独立枚举', motionStage, /enum class MotionProp \{ None, Arrow, Gear, Brush \}/, '刷子和箭头/齿轮共用一套 overlay');
+must('刷子与材质同源同步', motionStage, /launch \{ blockMaterial\.animateTo\(1f, tween\(Motion\.MediumMs, easing = LinearEasing\)\) \}/, '刷到哪亮到哪，两条时间轴必须一致');
+must('材质用 clipRect 裁切', commandBlock, /clipRect\(right = size\.width \* mat\)/, '免逐像素混合，O(1) 裁切');
+must('底层保留命令方块原色', commandBlock, /drawCommandBlock\(accent = accent, material = 0f, flash = flash\)/, '刷不到的地方还得是绿的');
+must('刷柄斜 18 度', propOverlay, /rotate\(degrees = 18f, pivot = Offset\(x, y\)\)/, '正着画像块橡皮');
+must('刷完方块轻抬', motionStage, /blockScale\.animateTo\(1\.03f, tween\(90, easing = Motion\.Ease\)\)/, '刷完要"活"过来一下');
+mustNot('材质不做模糊过渡', commandBlock, /Modifier\.blur|RenderEffect/, '红线：禁重度 blur');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

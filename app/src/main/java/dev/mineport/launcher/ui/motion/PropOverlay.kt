@@ -4,7 +4,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
@@ -52,6 +54,13 @@ fun PropOverlay(
                 recoil = r,
                 from = Offset(blockCenter.x + 240.dp.toPx(), blockCenter.y - 150.dp.toPx()),
                 to = Offset(blockCenter.x, blockCenter.y - 8.dp.toPx()),
+                accent = accent
+            )
+
+            MotionProp.Brush -> drawPropBrush(
+                progress = p,
+                from = Offset(blockCenter.x - 96.dp.toPx(), blockCenter.y - 26.dp.toPx()),
+                to = Offset(blockCenter.x + 34.dp.toPx(), blockCenter.y - 26.dp.toPx()),
                 accent = accent
             )
 
@@ -159,5 +168,47 @@ private fun DrawScope.drawPropGear(
             style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx())
         )
     }
+}
 
+/**
+ * 个性化刷子（T4）：斜 18° 的木柄 + 白刷毛 + 身后一条淡色扫痕。
+ *
+ * 刷子从方块左侧外扫到右侧，跟 `blockMaterial` 的 0→1 线性推进同源，
+ * 所以「刷到哪，方块的彩色就亮到哪」。
+ */
+private fun DrawScope.drawPropBrush(
+    progress: Float,
+    from: Offset,
+    to: Offset,
+    accent: Color
+) {
+    val p = progress.coerceIn(0f, 1f)
+    val x = from.x + (to.x - from.x) * p
+    val y = from.y + (to.y - from.y) * p
+    val w = 34.dp.toPx()
+    val h = 14.dp.toPx()
+
+    // 扫痕压在手底下。
+    drawLine(
+        color = accent.copy(alpha = 0.20f),
+        start = from,
+        end = Offset(x, y),
+        strokeWidth = 3.dp.toPx(),
+        cap = StrokeCap.Round
+    )
+
+    rotate(degrees = 18f, pivot = Offset(x, y)) {
+        drawRoundRect(
+            color = accent.copy(alpha = 0.95f),
+            topLeft = Offset(x - w * 0.5f, y - h * 2.1f),
+            size = Size(w, h * 1.55f),
+            cornerRadius = CornerRadius(6.dp.toPx())
+        )
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.92f),
+            topLeft = Offset(x - w * 0.5f, y - h * 0.62f),
+            size = Size(w, h * 0.70f),
+            cornerRadius = CornerRadius(2.dp.toPx())
+        )
+    }
 }

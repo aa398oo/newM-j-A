@@ -32,6 +32,9 @@ enum class MotionIntent {
     /** 进设置页：齿轮从右上飞过来扣合（T3）。 */
     SettingsImpact,
 
+    /** 进个性化页：刷子从左往右粉刷方块，材质逐段显现（T4）。 */
+    PersonalizeBrush,
+
     /** 子目录进入：方块碎裂（T5 才接粒子，T1 只有缩小淡出）。 */
     Shatter,
 
@@ -40,7 +43,7 @@ enum class MotionIntent {
 }
 
 /** T3 的道具。绘制在 [dev.mineport.launcher.ui.motion.PropOverlay] 里。 */
-enum class MotionProp { None, Arrow, Gear }
+enum class MotionProp { None, Arrow, Gear, Brush }
 
 /** 当前的逻辑阶段。只用于内容切换 / 测试 / a11y，不驱动动画值。 */
 enum class MotionStageState { Idle, Impacted, Shattering }
@@ -144,6 +147,7 @@ class MotionStage(
             MotionIntent.TabImpact -> impact()
             MotionIntent.DownloadImpact -> propHit(MotionProp.Arrow)
             MotionIntent.SettingsImpact -> propHit(MotionProp.Gear)
+            MotionIntent.PersonalizeBrush -> brushSweep()
             MotionIntent.Shatter -> shatterBlock()
             MotionIntent.Awaken -> awaken()
         }
@@ -255,5 +259,38 @@ class MotionStage(
             return
         }
         blockMaterial.animateTo(1f, tween(Motion.MediumMs, easing = Motion.Ease))
+    }
+
+    /**
+     * T4 刷子粉刷：刷子从左扫到右，材质沿着刷子在方块上的位置逐段显现。
+     *
+     * 两个值必须同步推进（都是 260ms 线性）：`propProgress` 决定刷子在哪，
+     * `blockMaterial` 决定方块被刷到哪儿——只要时间轴同源，视觉上就是「刷到哪亮到哪」，
+     * 不需要在绘制里互相读。
+     */
+    private suspend fun brushSweep() {
+        stage = MotionStageState.Impacted
+        prop = MotionProp.Brush
+        if (reduceMotion) {
+            blockMaterial.snapTo(1f)
+            propProgress.snapTo(0f)
+            prop = MotionProp.None
+            stage = MotionStageState.Idle
+            return
+        }
+        blockMaterial.snapTo(0f)
+        propProgress.snapTo(0f)
+        coroutineScope {
+            launch { propProgress.animateTo(1f, tween(Motion.MediumMs, easing = LinearEasing)) }
+            launch { blockMaterial.animateTo(1f, tween(Motion.MediumMs, easing = LinearEasing)) }
+        }
+        // 刷完轻轻抬起一点：方块"活"过来，但不像撞击那样抖。
+        if (!reduceMotion) {
+            blockScale.animateTo(1.03f, tween(90, easing = Motion.Ease))
+            blockScale.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 700f))
+        }
+        propProgress.snapTo(0f)
+        prop = MotionProp.None
+        stage = MotionStageState.Idle
     }
 }

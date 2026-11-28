@@ -277,6 +277,7 @@ private fun NavRail(
                         when (tab.route) {
                             "downloads" -> stage.play(MotionIntent.DownloadImpact)
                             "settings" -> stage.play(MotionIntent.SettingsImpact)
+                "personalize" -> stage.play(MotionIntent.PersonalizeBrush)
                             else -> stage.play(MotionIntent.TabImpact)
                         }
                     }

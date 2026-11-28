@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.boundsInRoot
@@ -46,11 +47,16 @@ fun CommandBlock(
             translationY = stage.railPull.value * 14.dp.toPx()
         }
     ) {
-        drawCommandBlock(
-            accent = accent,
-            material = stage.blockMaterial.value.coerceIn(0f, 1f),
-            flash = stage.flash.value.coerceIn(0f, 1f)
-        )
+        val mat = stage.blockMaterial.value.coerceIn(0f, 1f)
+        val flash = stage.flash.value.coerceIn(0f, 1f)
+        // T4 材质显现：底层永远是命令方块原色；上层彩色方块按刷到的进度裁切。
+        // clipRect 是 O(1) 的，不做逐像素混合——比画两张位图再 alpha 叠加便宜得多。
+        drawCommandBlock(accent = accent, material = 0f, flash = flash)
+        if (mat > 0.01f) {
+            clipRect(right = size.width * mat) {
+                drawCommandBlock(accent = accent, material = 1f, flash = 0f)
+            }
+        }
     }
 }
 
