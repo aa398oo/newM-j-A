@@ -63,7 +63,22 @@ class InstanceStore(context: Context) {
         if (index >= 0) list.toMutableList().also { it[index] = instance } else list + instance
     }
 
-    suspend fun delete(id: String) = mutate { list -> list.filterNot { it.id == id } }
+    /**
+     * 删一条版本记录。
+     *
+     * [deleteFiles] 默认 false：游戏目录里有存档、模组、光影，删记录不该顺手把它们清了。
+     * 真要清是用户在删除对话框里显式勾选的，而且目录名按 [GameInstance.gameDirName] 拼，
+     * 不跟着 [id] 走——id 是记录主键，目录名是历史遗留（早期版本用 uuid 命名）。
+     */
+    suspend fun delete(id: String, deleteFiles: Boolean = false) {
+        val target = _instances.value.firstOrNull { it.id == id }
+        if (deleteFiles && target != null) {
+            withContext(Dispatchers.IO) {
+                File(file.parentFile, "instances/" + target.gameDirName).deleteRecursively()
+            }
+        }
+        mutate { list -> list.filterNot { it.id == id } }
+    }
 
     suspend fun markPlayed(id: String) = mutate { list ->
         list.map { if (it.id == id) it.copy(lastPlayedEpochMs = System.currentTimeMillis()) else it }

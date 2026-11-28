@@ -9,10 +9,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +27,7 @@ import dev.mineport.launcher.ui.components.EmptyState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -45,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -84,6 +88,8 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
     var editing by remember { mutableStateOf<GameInstance?>(null) }
     var modsFor by remember { mutableStateOf<GameInstance?>(null) }
     var pendingDelete by remember { mutableStateOf<GameInstance?>(null) }
+    // 「同时删游戏目录」跟着对话框走，取消/关闭都要复位，否则下次默认勾着。
+    var deleteFiles by remember { mutableStateOf(false) }
     // 导入桌面端已装好的版本目录（Forge/NeoForge/整合包），复制进私有 versions/。
     val importVersionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -256,22 +262,44 @@ fun InstancesScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
 
     pendingDelete?.let { instance ->
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
+            onDismissRequest = { pendingDelete = null; deleteFiles = false },
             title = { Text("删除版本") },
             text = {
-                Text(
-                    "确定删除「" + instance.name + "」？\n\n" +
-                        "只删除版本配置，游戏目录（" + instance.gameDirName + "）里的存档与模组会保留。"
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("确定删除「" + instance.name + "」？")
+                    Text(
+                        "默认只删版本配置，游戏目录（" + instance.gameDirName + "）里的存档、模组、光影都会保留。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { deleteFiles = !deleteFiles }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = deleteFiles, onCheckedChange = { deleteFiles = it })
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "同时删除游戏目录（存档也会没，不可恢复）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (deleteFiles) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(onClick = {
-                    scope.launch { container.instanceStore.delete(instance.id) }
+                    scope.launch { container.instanceStore.delete(instance.id, deleteFiles) }
                     pendingDelete = null
+                    deleteFiles = false
                 }) { Text("删除") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null; deleteFiles = false }) { Text("取消") }
             }
         )
     }

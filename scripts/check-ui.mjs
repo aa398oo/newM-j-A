@@ -40,6 +40,7 @@ const motion = read('app/src/main/java/dev/mineport/launcher/ui/motion/Motion.kt
 const main = read('app/src/main/java/dev/mineport/launcher/MainActivity.kt');
 const app = read('app/src/main/java/dev/mineport/launcher/MineportApplication.kt');
 const instances = read('app/src/main/java/dev/mineport/launcher/ui/instances/InstancesScreen.kt');
+const instanceStore = read('app/src/main/java/dev/mineport/launcher/data/InstanceStore.kt');
 const downloads = read('app/src/main/java/dev/mineport/launcher/ui/downloads/DownloadsScreen.kt');
 const contentTab = read('app/src/main/java/dev/mineport/launcher/ui/downloads/ContentTab.kt');
 const contentInstaller = read('app/src/main/java/dev/mineport/launcher/mod/ContentInstaller.kt');
@@ -430,6 +431,24 @@ must('卡片有卸载入口', contentTab, /if \(installed && onUninstall != null
 must('卸载后刷新已装标记', contentTab,
   /fun uninstall\(hit: ModrinthHit\)[\s\S]{0,300}?installedTick \+= 1/,
   '不刷新的话按钮还停在「已装」');
+// ---------- 删除版本：默认不动游戏目录 ----------
+must('删除可带删文件开关', instanceStore,
+  /suspend fun delete\(id: String, deleteFiles: Boolean = false\)/,
+  '默认 false 是关键：删记录不该顺手清存档');
+must('删目录按 gameDirName 拼', instanceStore,
+  /"instances\/" \+ target\.gameDirName/,
+  'id 是记录主键，目录名是历史遗留的 gameDirName');
+must('先删文件再删记录', instanceStore,
+  /deleteRecursively\(\)[\s\S]{0,200}?mutate \{ list -> list\.filterNot/,
+  '目录删到一半失败时，记录还在，用户能重试');
+must('删除对话框有复选框', instances, /Checkbox\(checked = deleteFiles/,
+  '破坏性操作必须显式勾选');
+must('勾选后文案变红', instances,
+  /if \(deleteFiles\) MaterialTheme\.colorScheme\.error/,
+  '存档不可恢复，视觉上要提示');
+must('取消与关闭都复位', instances,
+  /onDismissRequest = \{ pendingDelete = null; deleteFiles = false \}/,
+  '不复位的话下次默认勾着，迟早误删');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
