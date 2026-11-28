@@ -108,6 +108,15 @@ fun ContentTab(
     var reloadKey by remember { mutableStateOf(0) }
     // 装完只刷新「已装」标记，不重搜列表（重搜会闪一次 loading，还把滚动位置顶回去）。
     var installedTick by remember { mutableStateOf(0) }
+    // 「只看已装」：勾上后只在当前这一页结果里筛（不另发请求，Modrinth 没有 installed 维度）。
+    var onlyInstalled by remember { mutableStateOf(false) }
+    val installedHere = remember(hits, installedTick, kind, instanceDir) {
+        hits.count { ContentInstaller.isInstalled(instanceDir, kind, it.slug) }
+    }
+    val shown = remember(hits, installedTick, onlyInstalled, kind, instanceDir) {
+        if (!onlyInstalled) hits
+        else hits.filter { ContentInstaller.isInstalled(instanceDir, kind, it.slug) }
+    }
     var active by remember { mutableStateOf<ModrinthHit?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     val progress = remember { MutableStateFlow("") }
@@ -214,6 +223,36 @@ fun ContentTab(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
                 )
+                // 已装的内容只在「当前这一页结果」里数：Modrinth 的搜索没有 installed 维度，
+                // 与其再发一次请求，不如把已装标记就地汇总成一个开关。
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "共 " + hits.size + " 条" + if (installedHere > 0) " · 已装 " + installedHere else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (installedHere > 0) {
+                        val on = onlyInstalled
+                        Text(
+                            text = if (on) "只看已装 ✓" else "只看已装",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    if (on) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceContainerHigh
+                                )
+                                .clickable { onlyInstalled = !on }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (on) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
         }
 
@@ -246,15 +285,25 @@ fun ContentTab(
             }
 
             else -> {
-                items(hits, key = { it.project_id }) { hit ->
-                    val installed = remember(hit.project_id, kind, installedTick) {
-                        ContentInstaller.isInstalled(instanceDir, kind, hit.slug)
+                if (shown.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Filled.Search,
+                            title = "这一页里还没有已装的内容",
+                            hint = "关掉「只看已装」，或者滑到底加载下一页再筛。"
+                        )
                     }
-                    ContentRow(
-                        hit = hit,
-                        installed = installed,
-                        onClick = { install(hit) }
-                    )
+                } else {
+                    items(shown, key = { it.project_id }) { hit ->
+                        val installed = remember(hit.project_id, kind, installedTick) {
+                            ContentInstaller.isInstalled(instanceDir, kind, hit.slug)
+                        }
+                        ContentRow(
+                            hit = hit,
+                            installed = installed,
+                            onClick = { install(hit) }
+                        )
+                    }
                 }
                 // 一页 20 条，滑到底再决定要不要下一页：手机流量与 Modrinth 限额都要省着用。
                 item(key = "__more__") {

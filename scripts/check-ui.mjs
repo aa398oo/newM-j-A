@@ -403,6 +403,19 @@ must('库已落盘则跳过', forgeInstaller,
 must('安装器已下则复用', forgeInstaller,
   /if \(installer\.isFile && installer\.length\(\) > 0L\) \{[\s\S]{0,200}?复用已下载的 Forge 安装器/,
   '5.9MB 重试没必要重拉');
+// ---------- 内容分类：只看已装 ----------
+must('已装数量就地汇总', contentTab, /val installedHere = remember\(hits, installedTick, kind, instanceDir\)/,
+  'Modrinth 没有 installed 维度，只能在当前页结果里数');
+must('筛选不发新请求', contentTab,
+  /val shown = remember\(hits, installedTick, onlyInstalled, kind, instanceDir\)/,
+  '勾选只影响渲染，不能重新搜一次');
+must('列表渲染 shown', contentTab, /items\(shown, key = \{ it\.project_id \}\)/,
+  '渲染 hits 会让开关看起来没生效');
+must('筛空有专门空态', contentTab, /这一页里还没有已装的内容/,
+  '空的沉默比空态更让人迷惑');
+must('开关只在有已装时出现', contentTab,
+  /if \(installedHere > 0\) \{[\s\S]{0,200}?只看已装/,
+  '一条都没装时摆个开关是噪音');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
