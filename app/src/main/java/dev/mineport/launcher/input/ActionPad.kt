@@ -15,8 +15,9 @@ enum class ActionType { KEY, MOUSE_LEFT, MOUSE_RIGHT }
 /**
  * 动作轮盘的一个槽位。
  *
- * [code] 在 [ActionType.KEY] 时是 LWJGL 键码（如 Space=32），
- * 在鼠标类型时忽略（用 [ActionType] 区分左右键）。
+ * [code] 在 [ActionType.KEY] 时是 GLFW 键码（如 Space=32）；
+ * 在 [ActionType.MOUSE_LEFT] / [ActionType.MOUSE_RIGHT] 时是鼠标键号（0=左、1=右），
+ * 由 `nativeSendMouseButton` 原样下传。
  */
 data class ActionSlot(
     val index: Int,
@@ -35,12 +36,28 @@ data class ActionSlot(
  * 这里不持有计时器——保持纯函数式，方便测试。
  */
 class ActionPad(
-    /** 8 个槽位。编辑模式改绑后整体替换，绘制与命中都读这里，保证「改完立刻生效」。 */
-    val slots: List<ActionSlot>,
+    /** 8 个槽位的初始绑定。编辑模式改绑后整体替换，绘制与命中都读这里。 */
+    slots: List<ActionSlot>,
     private val onSlot: (slot: ActionSlot, pressed: Boolean) -> Unit,
+    /** 进游戏时是否直接展开；默认收起成小球（UX-21 §21.3）。 */
+    initiallyExpanded: Boolean = false,
 ) {
+    /** 当前槽位绑定。改绑走 [bind] / [cycleSlot]，保证回调与状态一起更新。 */
+    var slots: List<ActionSlot> = slots
+        private set
+
     /** 是否展开成 8 槽轮盘。 */
-    var expanded by mutableStateOf(true)
+    var expanded by mutableStateOf(initiallyExpanded)
+        private set
+
+    /** 展开/收起变化回调：宿主持久化 actionPadExpanded 用。 */
+    var onExpandedChange: ((Boolean) -> Unit)? = null
+
+    /** 槽位绑定变化回调：宿主持久化 action-pad.json 用。 */
+    var onBindingsChange: ((List<ActionSlot>) -> Unit)? = null
+
+    /** 编辑态当前选中的槽位（-1 表示还没点过）。 */
+    var editSlot by mutableStateOf(-1)
         private set
 
     /**
@@ -51,16 +68,21 @@ class ActionPad(
     var mode by mutableStateOf(PadMode.PLAY)
         private set
 
-    /** 进入编辑模式。 */
+    /** 进入编辑模式：先松开所有按住的槽，再强制展开（编辑必须看得见全部槽位）。 */
     fun enterEdit() {
         up()
+        // 走 expand() 而不是直接改 expanded：这样 onExpandedChange 会落盘，重进游戏仍是展开态。
+        expand()
+        editSlot = -1
         mode = PadMode.EDIT
     }
 
     /** 退出编辑模式。 */
     fun exitEdit() {
         up()
+        editSlot = -1
         mode = PadMode.PLAY
+        markTouch()
     }
 
     /** 最近一次触摸轮盘的时间（uptimeMillis）。用于「4 秒无操作自动收起」。 */
@@ -111,7 +133,10 @@ class ActionPad(
         private set
 
     fun expand() {
-        expanded = true
+        if (!expanded) {
+            expanded = true
+            onExpandedChange?.invoke(true)
+        }
         markTouch()
     }
 
@@ -120,11 +145,44 @@ class ActionPad(
      */
     fun collapse() {
         up()
-        expanded = false
+        editSlot = -1
+        if (expanded) {
+            expanded = false
+            onExpandedChange?.invoke(false)
+        }
     }
 
     fun toggle() {
-        expanded = !expanded
+        if (expanded) collapse() else expand()
+    }
+
+    /**
+     * 改绑一个槽位。绑定变了以后，如果这个槽正被按住，先松开——否则松手时会释放到「新动作」上，
+     * 旧动作永远停在按下态。
+     */
+    fun bind(index: Int, slot: ActionSlot) {
+        if (index !in slots.indices) return
+        if (activeSlot?.index == index) up()
+        val next = slots.toMutableList()
+        next[index] = slot.copy(index = index)
+        slots = next
+        onBindingsChange?.invoke(slots)
+    }
+
+    /**
+     * 编辑态点一下槽位：切到候选池 [REBIND_POOL] 里的下一个动作。
+     *
+     * 为什么是「循环切换」而不是弹面板：面板要自己抢触摸（本工程的触摸全由宿主按 pointer 分发），
+     * 弹出来反而会挡住轮盘、还要处理面板内外的手势竞争。循环切换零额外触摸层，
+     * 点 18 次最多，也足够改出任何常用组合。
+     */
+    fun cycleSlot(index: Int) {
+        val current = slots.getOrNull(index) ?: return
+        val at = REBIND_POOL.indexOfFirst { it.type == current.type && it.code == current.code }
+        val next = REBIND_POOL[(at + 1).mod(REBIND_POOL.size)]
+        bind(index, next)
+        editSlot = index
+        markTouch()
     }
 
     /**
@@ -216,13 +274,41 @@ class ActionPad(
         /** 默认 8 槽：跳跃 / 使用 / 攻击 / 丢弃 / 潜行 / 副手 / 视角切换 / 菜单。 */
         fun defaultSlots(): List<ActionSlot> = listOf(
             ActionSlot(0, ActionType.KEY, 32, "跳"),
-            ActionSlot(1, ActionType.KEY, 69, "用"),
+            ActionSlot(1, ActionType.MOUSE_RIGHT, 1, "用"),
             ActionSlot(2, ActionType.MOUSE_LEFT, 0, "攻"),
             ActionSlot(3, ActionType.KEY, 81, "丢"),
             ActionSlot(4, ActionType.KEY, 340, "潜"),
-            ActionSlot(5, ActionType.MOUSE_RIGHT, 1, "副"),
-            ActionSlot(6, ActionType.KEY, 116, "视"),
+            ActionSlot(5, ActionType.KEY, 116, "副"),
+            ActionSlot(6, ActionType.KEY, 294, "视"),
             ActionSlot(7, ActionType.KEY, 256, "菜单"),
+        )
+
+        /**
+         * 编辑态可循环切换的动作池：只放 MC 常用动作，避免翻几十次才轮到。
+         *
+         * 键码是 GLFW 口径（Space=32、Shift=340、E=69、Q=81、F=116、F5=294、Esc=256、
+         * T=84、Tab=258、1/2/3=49/50/51、W/A/S/D=87/65/83/68）。
+         * 里面每个 slot 的 index 都是占位 0，[ActionPad.bind] 会改成真实下标。
+         */
+        val REBIND_POOL: List<ActionSlot> = listOf(
+            ActionSlot(0, ActionType.MOUSE_LEFT, 0, "攻"),
+            ActionSlot(0, ActionType.MOUSE_RIGHT, 1, "用"),
+            ActionSlot(0, ActionType.KEY, 32, "跳"),
+            ActionSlot(0, ActionType.KEY, 340, "潜"),
+            ActionSlot(0, ActionType.KEY, 81, "丢"),
+            ActionSlot(0, ActionType.KEY, 69, "包"),
+            ActionSlot(0, ActionType.KEY, 116, "副"),
+            ActionSlot(0, ActionType.KEY, 294, "视"),
+            ActionSlot(0, ActionType.KEY, 256, "菜单"),
+            ActionSlot(0, ActionType.KEY, 84, "聊天"),
+            ActionSlot(0, ActionType.KEY, 258, "列表"),
+            ActionSlot(0, ActionType.KEY, 49, "1"),
+            ActionSlot(0, ActionType.KEY, 50, "2"),
+            ActionSlot(0, ActionType.KEY, 51, "3"),
+            ActionSlot(0, ActionType.KEY, 87, "前"),
+            ActionSlot(0, ActionType.KEY, 83, "后"),
+            ActionSlot(0, ActionType.KEY, 65, "左"),
+            ActionSlot(0, ActionType.KEY, 68, "右"),
         )
     }
 }

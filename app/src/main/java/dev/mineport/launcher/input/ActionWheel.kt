@@ -27,7 +27,11 @@ import androidx.compose.ui.unit.dp
 fun ActionWheel(
     active: ActionSlot?,
     modifier: Modifier = Modifier,
-    actions: List<ActionSlot> = ActionPad.defaultSlots()
+    actions: List<ActionSlot> = ActionPad.defaultSlots(),
+    /** 编辑态：扇区点击 = 换动作，中心变成「完成」。 */
+    editing: Boolean = false,
+    /** 编辑态刚改过的槽位下标（-1 表示没有）。 */
+    editSlot: Int = -1,
 ) {
     if (actions.isEmpty()) return
     val density = LocalDensity.current
@@ -38,11 +42,11 @@ fun ActionWheel(
         val step = 360f / actions.size
         val startOffset = -90f - step / 2f
 
-        // 背景压暗
-        drawCircle(Color(0x66000000), radius * 1.18f, center)
+        // 背景压暗：编辑态再深一点，压住游戏画面、突出槽位
+        drawCircle(if (editing) Color(0x99000000) else Color(0x66000000), radius * 1.18f, center)
 
         actions.forEachIndexed { index, action ->
-            val selected = action == active
+            val selected = action == active || (editing && index == editSlot)
             // 选中的扇区外扩 4%，形成「被按下去又弹起」的层次，而不是只换颜色
             val r = if (selected) radius * 1.04f else radius
             drawArc(
@@ -82,7 +86,11 @@ fun ActionWheel(
             }
             paint.color = 0xFF22D3A6.toInt()
             paint.textSize = with(density) { 14.dp.toPx() }
-            canvas.nativeCanvas.drawText(active?.label ?: "动作", center.x, center.y + paint.textSize / 3f, paint)
+            val centerText = when {
+                editing -> "完成"
+                else -> active?.label ?: "动作"
+            }
+            canvas.nativeCanvas.drawText(centerText, center.x, center.y + paint.textSize / 3f, paint)
         }
     }
 }

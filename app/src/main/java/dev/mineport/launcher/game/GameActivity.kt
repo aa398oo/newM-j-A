@@ -17,9 +17,12 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import dev.mineport.launcher.MineportApplication
 import dev.mineport.launcher.data.GameInstance
-import dev.mineport.launcher.input.ActionWheel
+import dev.mineport.launcher.input.ActionPad
 import dev.mineport.launcher.input.ActionSlot
 import dev.mineport.launcher.input.ActionType
+import dev.mineport.launcher.input.ActionWheel
+import dev.mineport.launcher.input.PadMode
+import dev.mineport.launcher.input.PadPrefs
 import dev.mineport.launcher.jvm.JvmLaunchSpec
 import dev.mineport.launcher.jvm.JvmLauncher
 import dev.mineport.launcher.jvm.JvmStartResult
@@ -62,6 +65,9 @@ class GameActivity : ComponentActivity() {
     private var glView: GameSurfaceView? = null
     private lateinit var instance: GameInstance
     private lateinit var root: GameHostLayout
+
+    /** 自动收起的 1s ticker；onDestroy 必须停掉。 */
+    private var idleHandler: android.os.Handler? = null
 
     private fun status(text: String) {
         Log.i(TAG, text)
@@ -138,12 +144,20 @@ class GameActivity : ComponentActivity() {
             )
         )
 
-        // 动作轮盘逻辑：默认 8 槽；命中由 host 按 pointer 计算（带角度滞回），
-        // 按下/抬起经 handleWheel 转到 nativeSendKey / nativeSendMouseButton。
+        // 输入偏好：轮盘位置/展开态/8 槽绑定都落盘（SharedPreferences + filesDir/action-pad.json）。
+        val prefs = PadPrefs(this)
+
+        // 动作轮盘逻辑：8 槽来自 Prefs（首次运行是默认绑定）；命中由 host 按 pointer 计算
+        // （带角度滞回），按下/抬起经 handleWheel 转到 nativeSendKey / nativeSendMouseButton。
         // 必须在绘制层之前建好——收起态/展开态画哪个由 actionPad.expanded 决定。
-        val actionPad = dev.mineport.launcher.input.ActionPad(
-            dev.mineport.launcher.input.ActionPad.defaultSlots(),
-        ) { slot, down -> handleWheel(slot, down) }
+        val actionPad = ActionPad(
+            slots = prefs.loadSlots(),
+            onSlot = { slot, down -> handleWheel(slot, down) },
+            initiallyExpanded = prefs.actionPadExpanded,
+        )
+        // 编辑模式改绑 / 展开收起都立刻落盘，下次进游戏原样恢复。
+        actionPad.onBindingsChange = { prefs.saveSlots(it) }
+        actionPad.onExpandedChange = { prefs.actionPadExpanded = it }
         host.actionPad = actionPad
 
         // 左下角动作轮盘：纯展示层，触摸命中由 host 按 pointer 手动判定（见 GameHostLayout），
@@ -156,7 +170,12 @@ class GameActivity : ComponentActivity() {
             setContent {
                 MineportTheme {
                     if (actionPad.expanded) {
-                        ActionWheel(active = wheelActive, actions = actionPad.slots)
+                        ActionWheel(
+                            active = wheelActive,
+                            actions = actionPad.slots,
+                            editing = actionPad.mode == PadMode.EDIT,
+                            editSlot = actionPad.editSlot,
+                        )
                     } else {
                         ActionPadOverlay(
                             pad = actionPad,
@@ -173,16 +192,23 @@ class GameActivity : ComponentActivity() {
         }
         host.addView(
             wheel,
-            FrameLayout.LayoutParams(wheelSize, wheelSize, android.view.Gravity.BOTTOM or android.view.Gravity.START).apply {
-                leftMargin = (12 * density).toInt()
-                bottomMargin = (12 * density).toInt()
-            }
+            FrameLayout.LayoutParams(
+                wheelSize,
+                wheelSize,
+                android.view.Gravity.TOP or android.view.Gravity.START,
+            ),
         )
         host.wheelView = wheel
+        // 轮盘/小球整体透明度也跟 Prefs 走（和摇杆各自独立）。
+        wheel.alpha = prefs.actionPadAlpha
+        // 位置存归一化坐标（默认左下角）；真正摆放由 host 在 onSizeChanged 里按可用区域算，
+        // 换分辨率/旋转/分屏都不会跑到屏幕外。
+        host.setPadPosition(prefs.actionPadBallX, prefs.actionPadBallY)
 
         // 左侧浮动摇杆（UX-21）：左半屏任意位置按下出现基座，拖动控向，松手消失。
-        // 用全限定名避免再加 import；半径 140dp，死区由 MovePad 内部按 15% 处理。
-        val movePad = dev.mineport.launcher.input.MovePad((140 * density)) { key, pressed ->
+        // 半径来自 Prefs（默认 140dp，96–220dp），死区由 MovePad 内部按 15% 处理。
+        val moveRadius = prefs.movePadSizeDp * density
+        val movePad = dev.mineport.launcher.input.MovePad(moveRadius) { key, pressed ->
             NativeRenderer.nativeSendKey(
                 key,
                 if (pressed) NativeRenderer.KEY_PRESS else NativeRenderer.KEY_RELEASE,
@@ -191,19 +217,24 @@ class GameActivity : ComponentActivity() {
         host.movePad = movePad
 
         // 4 秒无操作自动收起（按住槽位/手指还搭在轮盘上时不收，见 ActionPad.autoCollapseIfIdle）。
-        val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        // 玩家在个性化里关掉 autoCollapse 后这里就不跑了。
+        idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
         val idleTick = object : Runnable {
             override fun run() {
-                actionPad.autoCollapseIfIdle()
-                idleHandler.postDelayed(this, 1000L)
+                if (prefs.actionPadAutoCollapse) actionPad.autoCollapseIfIdle()
+                idleHandler?.postDelayed(this, 1000L)
             }
         }
-        idleHandler.postDelayed(idleTick, 1000L)
+        idleHandler?.postDelayed(idleTick, 1000L)
 
         // 摇杆绘制层：铺满全屏的透明 ComposeView，只画基座与摇杆头，不消费触摸。
         val padOverlay = ComposeView(this).apply {
             setContent {
-                dev.mineport.launcher.ui.game.MovePadOverlay(movePad, 140 * density)
+                dev.mineport.launcher.ui.game.MovePadOverlay(
+                    pad = movePad,
+                    baseRadiusPx = moveRadius,
+                    alpha = prefs.movePadAlpha,
+                )
             }
         }
         host.addView(
@@ -393,6 +424,9 @@ class GameActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // 自动收起的 1s ticker 必须停：它会一直持有 Activity 与 ActionPad。
+        idleHandler?.removeCallbacksAndMessages(null)
+        idleHandler = null
         scope.cancel()
         PerfSampler.stop()
         JvmLauncher.stop()

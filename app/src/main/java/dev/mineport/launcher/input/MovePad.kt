@@ -124,5 +124,8 @@ class MovePad(
 
         /** 死区：偏移小于基座半径的这个比例时视为不动。 */
         const val DEAD_ZONE_RATIO = 0.15f
+
+        /** 默认基座直径（dp）；PadPrefs 的 movePadSize 默认就取这个值。 */
+        const val DEFAULT_BASE_DP = 140
     }
 }

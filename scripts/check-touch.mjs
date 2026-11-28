@@ -148,6 +148,43 @@ add('UX-21 攻/副两槽接通 native',
 add('UX-21 鼠标键不再只记日志', !/鼠标键暂未接通/.test(activity),
   'GameActivity 不再对 MOUSE_* 只 Log.w');
 
+// ── UX-21 收尾：Prefs 持久化 + 编辑模式 ─────────────────────────────────────
+const padPrefs = read('app/src/main/java/dev/mineport/launcher/input/PadPrefs.kt');
+const wheel = read('app/src/main/java/dev/mineport/launcher/input/ActionWheel.kt');
+const padOverlay = read('app/src/main/java/dev/mineport/launcher/ui/game/MovePadOverlay.kt');
+
+add('UX-21 绑定落盘 action-pad.json', /action-pad\.json/.test(codeOnly(padPrefs)),
+  'PadPrefs 把 8 槽绑定写 filesDir/action-pad.json');
+add('UX-21 坏数据回退默认', /defaultSlots\(\)/.test(codeOnly(padPrefs)) && /SLOT_COUNT/.test(codeOnly(padPrefs)),
+  'loadSlots 在文件缺失/JSON 损坏/数量不对时退回 defaultSlots');
+add('UX-21 改绑立刻落盘', /onBindingsChange\s*=\s*\{\s*prefs\.saveSlots/.test(codeOnly(activity)),
+  'GameActivity 把 onBindingsChange 接到 prefs.saveSlots');
+add('UX-21 展开态落盘', /onExpandedChange\s*=\s*\{\s*prefs\.actionPadExpanded/.test(codeOnly(activity)),
+  'GameActivity 把 onExpandedChange 接到 prefs.actionPadExpanded');
+add('UX-21 编辑态优先级分支', /pad\.mode == PadMode\.EDIT/.test(codeOnly(host)),
+  'claimWheel 先判编辑态（OWNER_EDIT），再判收起/展开');
+add('UX-21 长按 1.5s 进编辑', /editLongPressMs\s*=\s*1500L/.test(codeOnly(host)),
+  '长按小球 1500ms 进编辑模式');
+add('UX-21 编辑槽位循环改绑', /fun cycleSlot\(/.test(codeOnly(pad)) && /REBIND_POOL/.test(codeOnly(pad)),
+  'cycleSlot 在 REBIND_POOL 里切到下一个动作并 bind');
+add('UX-21 OWNER_EDIT 收尾不产生按键', /OWNER_EDIT -> Unit/.test(codeOnly(host)),
+  'endPointer 对 OWNER_EDIT 什么都不松');
+add('UX-21 展开/收起那一指不出动作', /WHEEL_IGNORE/.test(codeOnly(host)),
+  'wheelIndex 用 -2 哨兵，点球/点中心那条手势全程不触发槽位');
+add('UX-21 位置存归一化坐标', /fun setPadPosition\(/.test(codeOnly(host)) && /padNormX/.test(codeOnly(host))
+  && /onSizeChanged/.test(codeOnly(host)),
+  'setPadPosition 按 0..1 摆放，onSizeChanged 重新应用（不存绝对像素）');
+add('UX-21 摇杆透明度可调', /alpha: Float = 1f/.test(codeOnly(padOverlay))
+  && /prefs\.movePadAlpha/.test(codeOnly(activity)),
+  'MovePadOverlay 接 alpha，GameActivity 传 prefs.movePadAlpha');
+add('UX-21 自动收起可关', /if \(prefs\.actionPadAutoCollapse\)/.test(codeOnly(activity)),
+  'idle tick 受 prefs.actionPadAutoCollapse 控制');
+add('UX-21 轮盘透明度可调', /wheel\.alpha\s*=\s*prefs\.actionPadAlpha/.test(codeOnly(activity)),
+  'GameActivity 把 prefs.actionPadAlpha 应用到整个轮盘外框');
+add('UX-21 轮盘绘制编辑态', /editing: Boolean = false/.test(codeOnly(wheel))
+  && /editing -> "完成"/.test(codeOnly(wheel)),
+  'ActionWheel 编辑态中心显示「完成」，改过的槽位高亮');
+
 const failed = checks.filter((c) => !c.ok);
 for (const c of checks) {
   console.log((c.ok ? '  OK   ' : ' FAIL  ') + c.name + '  —  ' + c.detail);
