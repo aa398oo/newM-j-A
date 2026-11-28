@@ -106,6 +106,26 @@ object ThemePackStore {
             }
         }
 
+    /**
+     * 内置预设：不想折腾文件的人一键换口味。
+     *
+     * 只有三档，且都建立在预设主色上——自定义主色留给用户自己调，预设只管
+     * 「换一套氛围」。轮盘尺寸/透明度跟着改，是因为它们本来就在同一张卡片里。
+     */
+    fun presets(): List<ThemePack> = listOf(
+        ThemePack(
+            name = "经典蓝", author = "内置", theme = Prefs.THEME_LIGHT,
+            accent = Prefs.ACCENT_BLUE, animations = true, padSizeDp = 220, padAlpha = 1f
+        ),
+        ThemePack(
+            name = "暗夜绿", author = "内置", theme = Prefs.THEME_DARK,
+            accent = Prefs.ACCENT_GREEN, animations = true, padSizeDp = 220, padAlpha = 0.92f
+        ),
+        ThemePack(
+            name = "暖阳橙", author = "内置", theme = Prefs.THEME_LIGHT,
+            accent = Prefs.ACCENT_ORANGE, animations = true, padSizeDp = 240, padAlpha = 0.85f
+        )
+    )
     /** 校验：返回 null 表示能应用，否则是可展示给用户的理由。 */
     fun problem(pack: ThemePack): String? = when {
         pack.format != 1 -> "这个主题包是第 " + pack.format + " 版格式，当前只认识第 1 版"

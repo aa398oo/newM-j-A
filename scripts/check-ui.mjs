@@ -449,6 +449,13 @@ must('勾选后文案变红', instances,
 must('取消与关闭都复位', instances,
   /onDismissRequest = \{ pendingDelete = null; deleteFiles = false \}/,
   '不复位的话下次默认勾着，迟早误删');
+// ---------- UX-19 内置预设 ----------
+must('主题包提供内置预设', themePack, /fun presets\(\): List<ThemePack> = listOf\(/, '不想折腾文件的人也要能一键换');
+must('预设三档', themePack, /"经典蓝"[\s\S]{0,600}?"暗夜绿"[\s\S]{0,600}?"暖阳橙"/, '三档够覆盖浅色/深色/暖色');
+must('预设用预设主色而非硬编码 hex', themePack, /accent = Prefs\.ACCENT_/, '硬编码 hex 会让「主色」这套机制被绕过');
+must('个性化页列预设', personalize, /ThemePackStore\.presets\(\)\.forEach/, '有预设没入口等于没做');
+must('预设先校验再应用', personalize, /val reason = ThemePackStore\.problem\(pack\)[\s\S]{0,240}?ThemePackStore\.apply\(pack, prefs, padPrefs\)/, '坏预设不能半应用');
+must('预设应用后刷新 HUD 镜像', personalize, /已应用预设：[\s\S]{0,120}?onApplied\(\)/, '轮盘尺寸/透明度改了要同步本地镜像');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

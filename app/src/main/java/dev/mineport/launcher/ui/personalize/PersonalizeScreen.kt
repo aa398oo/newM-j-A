@@ -344,7 +344,28 @@ private fun ThemePackCard(prefs: Prefs, padPrefs: PadPrefs, onApplied: () -> Uni
         }
     }
 
-    SectionCard("主题包", "导出当前外观分享，或导入别人的 .mptheme（zip 里是 theme.json）。") {
+    SectionCard("主题包", "先用下方的内置预设换一套氛围，或导出/导入别人的 .mptheme（zip 里是 theme.json）。") {
+        Text(
+            "内置预设",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemePackStore.presets().forEach { pack ->
+                OutlinedButton(
+                    onClick = {
+                        val reason = ThemePackStore.problem(pack)
+                        if (reason != null) {
+                            status = "预设有问题：" + reason
+                        } else {
+                            ThemePackStore.apply(pack, prefs, padPrefs)
+                            status = "已应用预设：" + pack.name
+                            onApplied()
+                        }
+                    }
+                ) { Text(pack.name) }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { exportLauncher.launch("mineport-theme" + ThemePackStore.EXTENSION) }
