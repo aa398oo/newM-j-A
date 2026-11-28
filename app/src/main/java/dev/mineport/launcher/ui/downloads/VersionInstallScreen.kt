@@ -79,12 +79,8 @@ fun VersionInstallScreen(
     container: AppContainer,
     version: VersionEntry,
     onBack: () -> Unit,
-    /**
-     * @param name 新版本的名字
-     * @param needsRestart 装的是 Forge 时为 true：安装用掉了进程内那台 JVM，
-     *   它的 `-Dfcl.game.dir` 等属性停在安装目录上，只有重启进程后才能进游戏。
-     */
-    onDone: (String, Boolean) -> Unit
+    /** @param name 新版本的名字 */
+    onDone: (String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -126,6 +122,17 @@ fun VersionInstallScreen(
                 fileProgress = null
 
                 // 2) 加载器：Fabric 走纯 Kotlin 合并；Forge 要跑官方 install_profile 的 processor 链。
+                //
+                // 实例先建出来再装：Forge 的安装 JVM 会把 `-Dfcl.game.dir` 固定成实例目录，
+                // 装完复用同一台 JVM 进游戏时，目录/用户名/分辨率都已经是这台实例的，
+                // 不需要「装完请重启应用」。
+                val draft = GameInstance(
+                    name = name.trim().ifBlank { version.id },
+                    minecraftVersion = version.id,
+                    loader = loader,
+                    javaVersion = javaTarget,
+                    memoryMB = container.deviceProfile.recommendedMemoryMB
+                )
                 var resolvedLoader: String? = null
                 if (loader == Loader.FABRIC) {
                     stage = "安装 Fabric 加载器"
@@ -159,12 +166,19 @@ fun VersionInstallScreen(
                         return@launch
                     }
                     val clientJar = File(context.filesDir, "versions/${version.id}/${version.id}.jar")
+                    // 先把实例落盘：下面那台 JVM 的 gameDir 指向它，属性建好后改不了。
+                    container.instanceStore.upsert(draft)
+                    val metrics = context.resources.displayMetrics
                     val runner = ForgeJvmRunner(
                         context = context,
                         rootDir = context.filesDir,
                         minecraftVersion = version.id,
                         memoryMB = container.deviceProfile.recommendedMemoryMB,
                         runtimeRoot = runtimeRoot,
+                        gameDir = File(context.filesDir, "instances/" + draft.gameDirName),
+                        playerName = draft.playerName,
+                        width = if (draft.resolutionWidth > 0) draft.resolutionWidth else metrics.widthPixels,
+                        height = if (draft.resolutionHeight > 0) draft.resolutionHeight else metrics.heightPixels,
                         onStage = { stage = it }
                     )
                     val outcome = ForgeInstaller.install(
@@ -178,23 +192,19 @@ fun VersionInstallScreen(
                         }
                     )
                     if (outcome.isFailure) {
+                        // 装失败别留半成品：实例一存在，首页就会把它当可启动版本。
+                        container.instanceStore.delete(draft.id)
                         error = "Forge 安装失败：" + (outcome.exceptionOrNull()?.message ?: "未知错误")
                         return@launch
                     }
                     resolvedLoader = ForgeInstaller.loaderVersion()
                 }
 
-                // 3) 落成一条版本记录（游戏目录与 versions/ 是全局的，实例只存配置）。
-                val instance = GameInstance(
-                    name = name.trim().ifBlank { version.id },
-                    minecraftVersion = version.id,
-                    loader = loader,
-                    loaderVersion = resolvedLoader,
-                    javaVersion = javaTarget,
-                    memoryMB = container.deviceProfile.recommendedMemoryMB
-                )
+                // 3) 落成版本记录。（Forge 分支为了给安装 JVM 一个稳定的 gameDir，
+                //    前面已经 upsert 过一次；同 id 覆盖，不会多出一条。）
+                val instance = draft.copy(loaderVersion = resolvedLoader)
                 container.instanceStore.upsert(instance)
-                onDone(instance.name, loader == Loader.FORGE)
+                onDone(instance.name)
             } catch (e: CancellationException) {
                 throw e
             } finally {

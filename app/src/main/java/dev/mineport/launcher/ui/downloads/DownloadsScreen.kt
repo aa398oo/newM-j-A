@@ -122,15 +122,9 @@ fun DownloadsScreen(
             container = container,
             version = pending,
             onBack = { installFor = null },
-            onDone = { created, needsRestart ->
+            onDone = { created ->
                 installFor = null
-                val text = if (needsRestart) {
-                    // 说清楚为什么：安装占用了进程内那台 JVM，属性停在安装目录上。
-                    "已创建版本 $created（Forge）。请划掉本应用重进，再启动游戏。"
-                } else {
-                    "已创建版本 $created"
-                }
-                Toast.makeText(appContext, text, Toast.LENGTH_LONG).show()
+                Toast.makeText(appContext, "已创建版本 $created", Toast.LENGTH_LONG).show()
             }
         )
         return

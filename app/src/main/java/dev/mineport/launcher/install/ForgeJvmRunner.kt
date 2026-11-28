@@ -28,6 +28,16 @@ class ForgeJvmRunner(
     private val minecraftVersion: String,
     private val memoryMB: Int,
     private val runtimeRoot: File,
+    /**
+     * 安装期 JVM 的 `-Dfcl.game.dir`。
+     *
+     * 默认给一个临时目录，但真正该传的是**目标实例的目录**：同一个进程只能建一台
+     * JVM，装完进游戏会复用它，`-Dfcl.*` 这时改不了。传实例目录，装完就能直接玩。
+     */
+    private val gameDir: File = File(rootDir, "instances/forge-install"),
+    private val playerName: String = "installer",
+    private val width: Int = 1280,
+    private val height: Int = 720,
     private val onStage: (String) -> Unit = {}
 ) : ForgeInstaller.ProcessorRunner {
 
@@ -75,7 +85,7 @@ class ForgeJvmRunner(
     private fun startJvm() {
         started = true
         onStage("准备安装用 JVM")
-        val gameDir = File(rootDir, "instances/forge-install").apply { mkdirs() }
+        val gameDir = gameDir.apply { mkdirs() }
         val assetsDir = File(rootDir, "assets").apply { mkdirs() }
 
         val classPath = buildList {
@@ -98,9 +108,9 @@ class ForgeJvmRunner(
             gameDir = gameDir,
             assetsDir = assetsDir,
             version = minecraftVersion,
-            width = 1,
-            height = 1,
-            username = "installer",
+            width = width,
+            height = height,
+            username = playerName,
             backend = "gl4es",
             shaders = false,
             memoryMB = memoryMB,

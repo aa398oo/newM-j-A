@@ -165,7 +165,7 @@ must('安装页列 Fabric 版本', versionInstall, /FabricLoaderInstaller\.listL
 must('安装页开始安装按钮', versionInstall, /Text\(if \(busy\) "安装中…" else "开始安装"\)/,
   '底栏要有开始安装');
 must('安装页先装原版再装加载器', versionInstall,
-  /if \(!vanillaJson\.isFile\)[\s\S]{0,1200}?FabricLoaderInstaller\.install\(/,
+  /if \(!vanillaJson\.isFile\)[\s\S]{0,3200}?FabricLoaderInstaller\.install\(/,
   '原版没装要先装本体，再装 Fabric');
 must('安装页落成实例', versionInstall, /container\.instanceStore\.upsert\(instance\)/,
   '装完要建版本记录，否则下载页目标里看不到');
@@ -341,7 +341,7 @@ must('processor 失败即停', forgeInstaller, /if \(code != 0\) \{[\s\S]{0,600}
 // ---------- Forge 安装执行器（Android 侧） ----------
 const forgeJvm = read('app/src/main/java/dev/mineport/launcher/install/ForgeJvmRunner.kt');
 
-must('Forge processor 跑在进程内 JVM', forgeJvm, /class ForgeJvmRunner\([\s\S]{0,400}?: ForgeInstaller\.ProcessorRunner/, 'install_profile 的 6 个工具要用 HotSpot 跑');
+must('Forge processor 跑在进程内 JVM', forgeJvm, /class ForgeJvmRunner\([\s\S]{0,1800}?: ForgeInstaller\.ProcessorRunner/, 'install_profile 的 6 个工具要用 HotSpot 跑');
 must('Forge classpath 扫全量 libraries', forgeJvm, /walkTopDown\(\)[\s\S]{0,160}?extension\.equals\("jar"/, '安装期工具与运行时库位置由 profile 决定');
 must('Forge 复用游戏的 JVM 配置', forgeJvm, /useFclLwjgl = true/, '装完同一台 JVM 要能直接跑游戏');
 must('Forge processor 调 runMainClass', forgeJvm, /JvmLauncher\.runMainClass\(job\.mainClass/, '');
@@ -371,8 +371,17 @@ must('processor 带序号', forgeInstaller, /data class ProcessorRun\([\s\S]{0,1
 must('失败时带输出尾部', forgeInstaller, /fun logTail\(index: Int\): String\? = null/, '实现方决定能不能给');
 must('输出尾部拼进报错', forgeInstaller, /--- 输出尾部 ---/, '退出码本身没法诊断');
 must('每个 processor 一份日志', forgeJvm, /forge-processor-" \+ job\.index/, 'jni_bridge 只写异常文本，分开存才不会互相覆盖');
-must('Forge 装完提示重启', versionInstall, /onDone\(instance\.name, loader == Loader\.FORGE\)/, '安装占用了进程内 JVM');
-must('下载页说清为什么重启', downloads, /请划掉本应用重进/, '');
+must('先建实例再装 Forge', versionInstall,
+  /container\.instanceStore\.upsert\(draft\)[\s\S]{0,1200}?ForgeJvmRunner\(/,
+  '安装 JVM 的 -Dfcl.game.dir 指向实例目录，属性建好后改不了');
+must('安装 JVM 用实例目录', versionInstall,
+  /gameDir = File\(context\.filesDir, "instances\/" \+ draft\.gameDirName\)/,
+  '装完复用同一台 JVM 进游戏，目录必须已经是这台实例的');
+must('装失败回滚实例记录', versionInstall, /instanceStore\.delete\(draft\.id\)/,
+  '实例一存在首页就当成可启动版本');
+must('runner 可接收实例目录与身份', forgeJvm,
+  /private val gameDir: File = File\(rootDir, "instances\/forge-install"\)[\s\S]{0,200}?private val playerName: String/,
+  '默认值只是兜底，真实调用要传实例的');
 
 let failed = 0;
 for (const check of checks) {
