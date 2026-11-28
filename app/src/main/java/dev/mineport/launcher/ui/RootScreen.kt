@@ -158,7 +158,10 @@ fun RootScreen() {
                     )
                 }
                 composable("downloads") {
-                    DownloadsScreen()
+                    DownloadsScreen(
+                        container = container,
+                        onOpenInstances = { navController.navigate("instances") }
+                    )
                 }
                 composable("settings") {
                     SettingsScreen(container = container)

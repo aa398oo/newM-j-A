@@ -57,6 +57,30 @@ data class ModrinthDependency(
 )
 
 /**
+ * 下载页的「附属内容」类目。
+ *
+ * Modrinth 没有「地图」这个 project_type（facets 查 project_type:world 恒为 0），
+ * 最接近的是 mod + categories:worldgen（地形/世界生成），所以地图单列一类但走 mod 的装载路径。
+ */
+enum class ProjectType(val facet: String, val extraCategory: String? = null) {
+    MOD("mod"),
+    SHADER("shader"),
+    RESOURCE_PACK("resourcepack"),
+    MAP("mod", "worldgen");
+
+    val displayName: String
+        get() = when (this) {
+            MOD -> "模组"
+            SHADER -> "光影"
+            RESOURCE_PACK -> "材质"
+            MAP -> "地图"
+        }
+
+    /** 只有模组需要加载器过滤：光影/材质是 zip，地图是地形生成模组。 */
+    val needsLoader: Boolean get() = this == MOD || this == MAP
+}
+
+/**
  * Modrinth API v2 的最小客户端（免 key、公开接口）。
  *
  * 只做三件事：搜索、按版本/加载器取可用版本、解析 required 依赖。
@@ -75,6 +99,40 @@ object ModrinthClient {
     ): Result<List<ModrinthHit>> = withContext(Dispatchers.IO) {
         try {
             val facets = """[["categories:$loader"],["versions:$gameVersion"]]"""
+            val url = "$BASE/search?query=" + URLEncoder.encode(query, "UTF-8") +
+                "&limit=$limit&facets=" + URLEncoder.encode(facets, "UTF-8")
+            val body = Http.get(url)
+            Result.success(json.decodeFromString<ModrinthSearch>(body).hits)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 按类目搜索：模组看加载器，光影/材质只看游戏版本，地图=mod+worldgen。
+     *
+     * query 为空时 Modrinth 按下载量返回热门，所以首屏不必再写一套「推荐」接口。
+     */
+    suspend fun searchProjects(
+        query: String,
+        type: ProjectType,
+        gameVersion: String?,
+        loader: String?,
+        limit: Int = 20
+    ): Result<List<ModrinthHit>> = withContext(Dispatchers.IO) {
+        try {
+            val groups = ArrayList<List<String>>(4)
+            groups.add(listOf("project_type:" + type.facet))
+            type.extraCategory?.let { groups.add(listOf("categories:$it")) }
+            if (type.needsLoader && !loader.isNullOrBlank()) {
+                groups.add(listOf("categories:" + loader.lowercase()))
+            }
+            if (!gameVersion.isNullOrBlank()) {
+                groups.add(listOf("versions:" + gameVersion))
+            }
+            val facets = groups.joinToString(",", "[", "]") { group ->
+                group.joinToString(",", "[", "]") { "\"$it\"" }
+            }
             val url = "$BASE/search?query=" + URLEncoder.encode(query, "UTF-8") +
                 "&limit=$limit&facets=" + URLEncoder.encode(facets, "UTF-8")
             val body = Http.get(url)

@@ -41,6 +41,9 @@ const main = read('app/src/main/java/dev/mineport/launcher/MainActivity.kt');
 const app = read('app/src/main/java/dev/mineport/launcher/MineportApplication.kt');
 const instances = read('app/src/main/java/dev/mineport/launcher/ui/instances/InstancesScreen.kt');
 const downloads = read('app/src/main/java/dev/mineport/launcher/ui/downloads/DownloadsScreen.kt');
+const contentTab = read('app/src/main/java/dev/mineport/launcher/ui/downloads/ContentTab.kt');
+const contentInstaller = read('app/src/main/java/dev/mineport/launcher/mod/ContentInstaller.kt');
+const modrinth = read('app/src/main/java/dev/mineport/launcher/mod/Modrinth.kt');
 const padPrefs = read('app/src/main/java/dev/mineport/launcher/input/PadPrefs.kt');
 const gameActivity = read('app/src/main/java/dev/mineport/launcher/game/GameActivity.kt');
 
@@ -108,15 +111,44 @@ must('UX-18 HUD 位置预设', padPrefs, /fun setActionPadCorner\(left: Boolean\
 must('UX-18 HUD 尺寸进游戏', gameActivity, /prefs\.actionPadSizeDp \* density/,
   'GameActivity 的轮盘外框用 prefs.actionPadSizeDp');
 
-// —— 下载页横屏排版 ——
+// —— 下载页：横屏排版 ——
 mustNot('下载页不用 TopAppBar', downloads, /TopAppBar\(/,
   '横屏可用高约 375dp，64dp 的 TopAppBar 比内容还贵，应改成一行紧凑标题');
-must('下载页头部压成一行', downloads, /headlineSmall[\s\S]{0,600}?TextButton\(onClick = onReload\)/,
-  '标题 / 版本统计 / 刷新要并排在同一行');
+must('下载页标题一行', downloads, /"下载"[\s\S]{0,300}?typography\.headlineSmall/,
+  '标题用 headlineSmall 并排挨着版本信息');
+must('下载页统计进标题行', downloads, /summary \?: "正在拉取版本清单…"/,
+  '「最新 X · N 个版本」要显示在标题行，不能另占一行');
 must('下载页整页滚动', downloads, /item\(key = "__header__"\)/,
-  '标题和搜索框要作为 LazyColumn 的第 0 项，跟版本列表一起滚走');
+  '版本统计与搜索框要作为 LazyColumn 的第 0 项，跟列表一起滚走');
 must('下载页头部随滚动淡出', downloads, /graphicsLayer\s*\{[\s\S]{0,200}?alpha = headerAlpha/,
   '头部要用 graphicsLayer 按滚动距离淡出（draw 阶段读 state，不逐帧重组）');
+must('下载页搜索框不用浮动 label', downloads, /placeholder = \{ Text\("搜版本号/,
+  'label 会额外占 16dp 并让输入框长到 72dp，改用 placeholder');
+
+// —— 下载页：附属内容（模组 / 光影 / 材质 / 地图）——
+must('下载页五个分类', downloads, /VERSION\("版本"[\s\S]{0,260}?MAP\("地图"/,
+  '分类应含 版本 / 模组 / 光影 / 材质 / 地图');
+must('下载页按分类切内容', downloads, /ContentTab\(kind = kind, instance = target/,
+  '非版本分类交给 ContentTab(kind, instance)');
+must('下载页目标版本可选', downloads, /DropdownMenu\(expanded = menuOpen/,
+  '内容要装进某个已装版本，必须有目标版本选择器');
+must('下载页读已装实例', downloads, /container\.instanceStore\.instances\.collectAsState\(\)/,
+  '目标版本来自 InstanceStore，不能另存一份');
+must('下载页入口传容器', rootScreen, /DownloadsScreen\(\s*[\s\S]{0,80}?container = container/,
+  'RootScreen 要把 AppContainer 传给下载页');
+must('内容分栏按类目搜索', contentTab, /ModrinthClient\.searchProjects\(/, '走 searchProjects(type=…)');
+must('内容分栏装到目标版本', contentTab, /ContentInstaller\.install\(/, '安装落到目标版本目录');
+must('内容分栏无版本引导', contentTab, /"还没有版本"/, '没有版本时给去创建版本的入口');
+must('内容落点 mods', contentInstaller, /ProjectType\.MOD, ProjectType\.MAP -> File\(instanceDir, "mods"\)/,
+  '模组与地图（worldgen 模组）都进 mods/');
+must('光影落点 shaderpacks', contentInstaller, /ProjectType\.SHADER -> File\(instanceDir, "shaderpacks"\)/,
+  '光影是 zip，进 shaderpacks/');
+must('材质落点 resourcepacks', contentInstaller, /ProjectType\.RESOURCE_PACK -> File\(instanceDir, "resourcepacks"\)/,
+  '材质是 zip，进 resourcepacks/');
+must('搜索按类目拼 facets', modrinth, /"project_type:" \+ type\.facet/,
+  'facets 必须按类目拼，不能写死成 mod');
+must('地图走 worldgen', modrinth, /MAP\("mod", "worldgen"\)/,
+  'Modrinth 没有 world 类型，地图用 mod + worldgen 近似');
 must('下载页搜索框不用浮动 label', downloads, /placeholder = \{ Text\("搜版本号/,
   'label 会额外占 16dp 并让输入框长到 72dp，改用 placeholder');
 
