@@ -163,6 +163,20 @@ class GameActivity : ComponentActivity() {
             )
         }
         host.movePad = movePad
+
+        // 摇杆绘制层：铺满全屏的透明 ComposeView，只画基座与摇杆头，不消费触摸。
+        val padOverlay = ComposeView(this).apply {
+            setContent {
+                dev.mineport.launcher.ui.game.MovePadOverlay(movePad, 140 * density)
+            }
+        }
+        host.addView(
+            padOverlay,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
         setContentView(host)
 
         // 先把窗口像素尺寸同步给 GLFW/CallbackBridge：Android 上 Surface 尺寸就是
