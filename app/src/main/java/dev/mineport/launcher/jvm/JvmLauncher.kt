@@ -129,15 +129,24 @@ object JvmLauncher {
     private fun installNetStub(context: Context, runtimeRoot: File): Boolean {
         val target = File(runtimeRoot, "lib/libnet.so")
         if (target.isFile && target.length() > 0L) return true
+        target.parentFile?.mkdirs()
+        // assets/runtime 里本来就带了一份真的 libnet.so（约 99KB），但解包时漏了它。
+        // 先直接从这里读，比 APK 里的最小桩完整得多。
+        runCatching {
+            context.assets.open("runtime/lib/libnet.so").use { input ->
+                target.outputStream().use { out -> input.copyTo(out) }
+            }
+            Log.i("MineportJVM", "libnet.so 已从 assets 解出：" + target.absolutePath + " (" + target.length() + " 字节)")
+            return true
+        }.onFailure { Log.w("MineportJVM", "assets 里没有 libnet.so，改用 APK 里的桩", it) }
         val src = File(context.applicationInfo.nativeLibraryDir ?: return false, "libnet.so")
         if (!src.isFile) {
-            Log.w("MineportJVM", "libnet.so 替身没有打进 APK：" + src.absolutePath)
+            Log.w("MineportJVM", "libnet.so 桩也没打进 APK：" + src.absolutePath)
             return false
         }
         return runCatching {
-            target.parentFile?.mkdirs()
             src.copyTo(target, overwrite = true)
-            Log.i("MineportJVM", "libnet.so 替身已补：" + target.absolutePath + " (" + target.length() + " 字节)")
+            Log.i("MineportJVM", "libnet.so 桩已补：" + target.length() + " 字节")
             true
         }.getOrElse {
             Log.w("MineportJVM", "补 libnet.so 失败", it)
