@@ -50,14 +50,20 @@ import dev.mineport.launcher.data.Loader
 import dev.mineport.launcher.data.javaMajorFor
 import dev.mineport.launcher.download.VersionEntry
 import dev.mineport.launcher.install.FabricLoaderInstaller
+import dev.mineport.launcher.install.ForgeInstaller
+import dev.mineport.launcher.install.ForgeJvmRunner
 import dev.mineport.launcher.install.VersionInstaller
+import dev.mineport.launcher.jvm.JvmLauncher
+import dev.mineport.launcher.jvm.RuntimeStager
 import dev.mineport.launcher.ui.components.EmptyState
 import dev.mineport.launcher.ui.motion.LocalMotionStage
 import dev.mineport.launcher.ui.motion.MotionIntent
 import dev.mineport.launcher.ui.motion.PixelDotsLoading
 import java.io.File
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 版本安装页（点版本清单里的一行进来）。
@@ -114,7 +120,7 @@ fun VersionInstallScreen(
                 }
                 fileProgress = null
 
-                // 2) 加载器：目前只有 Fabric 走纯 Kotlin 合并（Forge 要跑官方 installer，还没接）。
+                // 2) 加载器：Fabric 走纯 Kotlin 合并；Forge 要跑官方 install_profile 的 processor 链。
                 var resolvedLoader: String? = null
                 if (loader == Loader.FABRIC) {
                     stage = "安装 Fabric 加载器"
@@ -129,6 +135,48 @@ fun VersionInstallScreen(
                         return@launch
                     }
                     resolvedLoader = outcome.getOrNull()
+                } else if (loader == Loader.FORGE) {
+                    // 进程内 JVM 只能创建一次，classpath 建好就改不了。装 Forge 要往
+                    // classpath 里塞安装期工具，所以必须拿一台还没建过的 JVM。
+                    val existing = runCatching { JvmLauncher.nativeRuntimeVersion() }.getOrDefault("")
+                    if (existing.isNotBlank()) {
+                        error = "安装 Forge 需要一台干净的 JVM（当前进程的 JVM 已经建好了，classpath 改不了）。\n" +
+                            "请先从最近任务里划掉本应用，再回来重装。"
+                        return@launch
+                    }
+                    val runtimeRoot = File(context.filesDir, "runtime")
+                    stage = "准备运行时"
+                    withContext(Dispatchers.IO) { RuntimeStager.ensure(context, runtimeRoot) }
+                    val runtimeState = RuntimeStager.inspect(runtimeRoot)
+                    if (!runtimeState.libjvmPresent || !runtimeState.modulePresent) {
+                        error = "安装 Forge 需要内置运行时：缺 libjvm.so 或 lib/modules（" +
+                            runtimeRoot.absolutePath + "）"
+                        return@launch
+                    }
+                    val clientJar = File(context.filesDir, "versions/${version.id}/${version.id}.jar")
+                    val runner = ForgeJvmRunner(
+                        context = context,
+                        rootDir = context.filesDir,
+                        minecraftVersion = version.id,
+                        memoryMB = container.deviceProfile.recommendedMemoryMB,
+                        runtimeRoot = runtimeRoot,
+                        onStage = { stage = it }
+                    )
+                    val outcome = ForgeInstaller.install(
+                        rootDir = context.filesDir,
+                        installerUrl = ForgeInstaller.installerUrl(),
+                        minecraftClientJar = clientJar,
+                        onStage = { stage = it },
+                        runner = runner,
+                        onProgress = { done, total ->
+                            if (total > 0) fileProgress = done.toInt() to total.toInt()
+                        }
+                    )
+                    if (outcome.isFailure) {
+                        error = "Forge 安装失败：" + (outcome.exceptionOrNull()?.message ?: "未知错误")
+                        return@launch
+                    }
+                    resolvedLoader = ForgeInstaller.loaderVersion()
                 }
 
                 // 3) 落成一条版本记录（游戏目录与 versions/ 是全局的，实例只存配置）。
@@ -197,11 +245,20 @@ fun VersionInstallScreen(
                 trailing = if (loader == Loader.FABRIC) "更换 ›" else "点击选择 ›",
                 onClick = if (busy) null else ({ pickingLoader = true })
             )
+            val forgeSupported = version.id == ForgeInstaller.SUPPORTED_MINECRAFT
             PickRow(
                 title = "Forge",
-                detail = "暂未支持（要跑官方 installer）",
-                trailing = null,
-                onClick = null
+                detail = when {
+                    !forgeSupported -> "仅支持 " + ForgeInstaller.SUPPORTED_MINECRAFT
+                    loader == Loader.FORGE -> "已选 " + ForgeInstaller.SUPPORTED_FORGE
+                    else -> ForgeInstaller.SUPPORTED_FORGE + "（首发只做这一个版本）"
+                },
+                trailing = when {
+                    !forgeSupported -> null
+                    loader == Loader.FORGE -> "已选 ›"
+                    else -> "点击选择 ›"
+                },
+                onClick = if (!forgeSupported || busy) null else ({ loader = Loader.FORGE; loaderId = null })
             )
             PickRow(
                 title = "OptiFine",
@@ -218,6 +275,7 @@ fun VersionInstallScreen(
             Text(
                 when {
                     loader == Loader.FABRIC -> "将安装：原版 " + version.id + " + Fabric"
+                    loader == Loader.FORGE -> "将安装：原版 " + version.id + " + Forge " + ForgeInstaller.SUPPORTED_FORGE
                     else -> "将安装：原版 " + version.id
                 },
                 style = MaterialTheme.typography.bodySmall,

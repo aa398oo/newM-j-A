@@ -434,6 +434,29 @@ object ForgeInstaller {
         json
     }
 
+    /**
+     * 打补丁后的 client jar 落在哪。
+     *
+     * 路径能从 `PATCHED` 变量算，但那个变量要等 stage 之后才有；启动 classpath 与
+     * 安装器的 JVM 都要在 stage 之前引用它，所以这里按 Maven 布局正推一遍。
+     * 返回的文件可能尚不存在（安装中），调用方自己 `isFile` 判断。
+     */
+    fun patchedJar(rootDir: File): File? {
+        val ref = MavenRef(
+            group = "net.minecraftforge",
+            artifact = "forge",
+            version = "$SUPPORTED_MINECRAFT-$SUPPORTED_FORGE",
+            classifier = "client"
+        )
+        return ref.resolve(File(rootDir, "libraries"))
+    }
+
+    /** 首发的 installer jar 地址（5.9 MB，含 install_profile 与 data/client.lzma）。 */
+    fun installerUrl(): String =
+        "https://maven.minecraftforge.net/net/minecraftforge/forge/" +
+            "$SUPPORTED_MINECRAFT-$SUPPORTED_FORGE/" +
+            "forge-$SUPPORTED_MINECRAFT-$SUPPORTED_FORGE-installer.jar"
+
     /** 把 [InstallProfile] 转回一份「只有 libraries」的 JsonObject，复用 [librariesOf]。 */
     private fun profileToJson(profile: InstallProfile): JsonObject =
         JsonObject(mapOf("libraries" to JsonArray(profile.libraryNames.map { JsonPrimitive(it) })))

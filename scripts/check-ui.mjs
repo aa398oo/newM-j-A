@@ -160,8 +160,6 @@ must('安装页有版本名输入', versionInstall, /BasicTextField\([\s\S]{0,90
   '要能改版本名（做进预览卡里，省横屏高度）');
 must('安装页列 Minecraft 本体', versionInstall, /title = "Minecraft"/, '清单第一行是本体');
 must('安装页可选 Fabric', versionInstall, /title = "Fabric"/, 'Fabric 行可选 loader 版本');
-must('安装页 Forge 明确未支持', versionInstall, /title = "Forge"[\s\S]{0,160}?暂未支持/,
-  'Forge 要显式说没接，不能装作能装');
 must('安装页列 Fabric 版本', versionInstall, /FabricLoaderInstaller\.listLoaders\(/,
   'loader 版本要从 Fabric meta 拉，不能用默认值糊过去');
 must('安装页开始安装按钮', versionInstall, /Text\(if \(busy\) "安装中…" else "开始安装"\)/,
@@ -340,6 +338,19 @@ must('args 里的输入才下载', forgeInstaller, /if \(a\.startsWith\("\["\) &
 must('Central 回退', forgeInstaller, /CENTRAL_MAVEN = "https:\/\/repo1\.maven\.org\/maven2\/"/, 'guava/commons-io 只在 Central');
 must('校验打补丁结果', forgeInstaller, /staged\.profile\.data\["PATCHED_SHA"\]/, '静默产出坏 jar 是最难查的失败模式');
 must('processor 失败即停', forgeInstaller, /check\(code == 0\)/, '后面步骤依赖前面输出');
+// ---------- Forge 安装执行器（Android 侧） ----------
+const forgeJvm = read('app/src/main/java/dev/mineport/launcher/install/ForgeJvmRunner.kt');
+
+must('Forge processor 跑在进程内 JVM', forgeJvm, /class ForgeJvmRunner\([\s\S]{0,400}?: ForgeInstaller\.ProcessorRunner/, 'install_profile 的 6 个工具要用 HotSpot 跑');
+must('Forge classpath 扫全量 libraries', forgeJvm, /walkTopDown\(\)[\s\S]{0,160}?extension\.equals\("jar"/, '安装期工具与运行时库位置由 profile 决定');
+must('Forge 复用游戏的 JVM 配置', forgeJvm, /useFclLwjgl = true/, '装完同一台 JVM 要能直接跑游戏');
+must('Forge processor 调 runMainClass', forgeJvm, /JvmLauncher\.runMainClass\(job\.mainClass/, '');
+must('Forge 安装前先解包运行时', versionInstallScreen, /RuntimeStager\.ensure\(context, runtimeRoot\)/, '没 libjvm 就跑不了 processor');
+must('Forge 安装拒绝复用脏 JVM', versionInstallScreen, /JvmLauncher\.nativeRuntimeVersion\(\)/, 'classpath 建好就改不了');
+must('Forge 安装走 ForgeInstaller.install', versionInstallScreen, /ForgeInstaller\.install\(/, '');
+must('Forge 行可选且写死首发版本', versionInstallScreen, /loader == Loader\.FORGE -> "已选 " \+ ForgeInstaller\.SUPPORTED_FORGE/, '');
+must('patched jar 路径可正推', forgeInstaller, /fun patchedJar\(rootDir: File\): File\?/, '启动 classpath 要先于 stage 引用它');
+must('installer 地址由常量拼出', forgeInstaller, /fun installerUrl\(\): String/, '');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
