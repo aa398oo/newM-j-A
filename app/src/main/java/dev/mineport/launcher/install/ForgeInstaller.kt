@@ -268,6 +268,9 @@ object ForgeInstaller {
     ): Result<Unit> {
         val ref = parseMaven(name) ?: return Result.failure(IllegalArgumentException("非法坐标 $name"))
         val target = ref.resolve(librariesDir)
+        // 已经落盘就跳过：FileDownloader 只在给了 sha1 时才判「目标已存在」，
+        // 而库列表的 sha1 不全，没有这一步重试安装会把 73 个库重下一遍。
+        if (target.isFile && target.length() > 0L) return Result.success(Unit)
         val urls = ArrayList<String>(3)
         if (!url.isNullOrBlank()) urls.add(url)
         urls.add(FORGE_MAVEN + ref.relativePath)
@@ -289,8 +292,13 @@ object ForgeInstaller {
     ): Result<Staged> = runCatching {
         val librariesDir = File(rootDir, "libraries")
         val installer = File(rootDir, "forge-installer.jar")
-        onStage("下载 Forge 安装器 …")
-        FileDownloader.download(listOf(installerUrl), installer).getOrThrow()
+        if (installer.isFile && installer.length() > 0L) {
+            // 复用上次下好的安装器：它 5.9MB，重试时没必要再拉一遍。
+            onStage("复用已下载的 Forge 安装器")
+        } else {
+            onStage("下载 Forge 安装器 …")
+            FileDownloader.download(listOf(installerUrl), installer).getOrThrow()
+        }
 
         val (profile, versionJson) = readProfile(installer).getOrThrow()
         require(profile.minecraft == SUPPORTED_MINECRAFT) {

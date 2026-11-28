@@ -396,6 +396,13 @@ must('方块绘制支持定位与缩放', commandBlock,
 must('封面方块带主色材质', home,
   /material = 0\.55f[\s\S]{0,160}?scale = 0\.62f/,
   'material=0.55 让方块带一半主色，跟渐变封面呼应');
+// ---------- Forge 重试不重下 ----------
+must('库已落盘则跳过', forgeInstaller,
+  /if \(target\.isFile && target\.length\(\) > 0L\) return Result\.success\(Unit\)/,
+  'FileDownloader 只在给 sha1 时判已存在，库没有全量 sha1');
+must('安装器已下则复用', forgeInstaller,
+  /if \(installer\.isFile && installer\.length\(\) > 0L\) \{[\s\S]{0,200}?复用已下载的 Forge 安装器/,
+  '5.9MB 重试没必要重拉');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
