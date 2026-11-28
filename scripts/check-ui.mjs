@@ -328,6 +328,18 @@ must('唤醒后材质保留', motionStage, /blockMaterial\.animateTo\(1f, tween\
 must('动画宿主下发给子树', motionStage, /val LocalMotionStage = staticCompositionLocalOf<MotionStage\?> \{ null \}/, '深页不用层层传参');
 must('选出 Fabric 就唤醒', versionInstallScreen, /motion\?\.play\(MotionIntent\.Awaken\)/, '选 loader = 方块被装上加载器');
 mustNot('丝带不用渐变位图', propOverlay, /Bitmap|ImageBitmap/, '全 Canvas 矢量');
+// ── Forge 1.20.1 安装器（install_profile 驱动） ───────────
+const forgeInstaller = read('app/src/main/java/dev/mineport/launcher/install/ForgeInstaller.kt');
+must('Forge 只支持首发组合', forgeInstaller, /SUPPORTED_MINECRAFT = "1\.20\.1"[\s\S]{0,120}?SUPPORTED_FORGE = "47\.2\.0"/, '先把一个组合做穿，再铺开');
+must('Maven 坐标解析', forgeInstaller, /fun parseMaven\(raw: String\): MavenRef\?/, 'install_profile 里到处是 group:artifact:version[:classifier][@ext]');
+must('Maven 布局落盘', forgeInstaller, /val relativePath: String/, 'libraries/ 必须按 Maven 布局，JVM classpath 才能直拼');
+must('跳过 server processor', forgeInstaller, /private fun sideAllows\(sides: List<String>, side: String\): Boolean/, 'server 那几条只会白下载');
+must('processor 入口映射', forgeInstaller, /startsWith\("net\.minecraftforge:binarypatcher:"\) -> "net\.minecraftforge\.binarypatcher\.ConsoleTool"/, '4 个工具的入口名是 install_profile 之外的约定');
+must('data 坐标只算路径', forgeInstaller, /fun resolveDataVars\(/, 'PATCHED 这类是 processor 的输出，提前下载必然 404');
+must('args 里的输入才下载', forgeInstaller, /if \(a\.startsWith\("\["\) && a\.endsWith\("\]"\)\) need\(/, 'mcp_config 的 mappings zip 只出现在 args 里');
+must('Central 回退', forgeInstaller, /CENTRAL_MAVEN = "https:\/\/repo1\.maven\.org\/maven2\/"/, 'guava/commons-io 只在 Central');
+must('校验打补丁结果', forgeInstaller, /staged\.profile\.data\["PATCHED_SHA"\]/, '静默产出坏 jar 是最难查的失败模式');
+must('processor 失败即停', forgeInstaller, /check\(code == 0\)/, '后面步骤依赖前面输出');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
