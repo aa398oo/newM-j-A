@@ -107,11 +107,26 @@ class MotionStage(
         private set
 
     /**
+     * 这次动画作用在哪个 rail 图标上。null = 没有图标参与的动画（或已结束）。
+     * rail 的五个图标都是 Canvas 自绘的，它们各自读这个值判断「是不是我」。
+     */
+    var glyph by mutableStateOf<RailGlyph?>(null)
+        private set
+
+    /**
      * 投递一个事件。并发投递时后到的会取消前一个（MutatorMutex 语义），
      * 这正是「任何时刻新输入都能接管」的实现方式。
      */
-    fun play(intent: MotionIntent) {
-        scope.launch { mutex.mutate { dispatch(intent) } }
+    fun play(intent: MotionIntent, glyph: RailGlyph? = null) {
+        this.glyph = glyph
+        scope.launch {
+            try {
+                mutex.mutate { dispatch(intent) }
+            } finally {
+                // 被新事件取消时也要清，否则那个图标会一直停在半动画状态。
+                this@MotionStage.glyph = null
+            }
+        }
     }
 
     /**

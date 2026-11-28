@@ -24,7 +24,7 @@ import kotlin.math.tan
  * UX-22 T3：道具层。全屏透明 overlay，只在 [MotionStage.prop] 不为 None 时画东西。
  *
  * 为什么单独一层而不是画进 CommandBlock：道具从右侧屏幕外飞过来，跨度远超
- * rail 底部那 42dp；放进方块自己的 Canvas 会被裁掉。
+ * rail 图标本身（22dp）；放进图标自己的 Canvas 会被裁掉。
  *
  * Canvas 不吃触摸（Canvas 本身只有 draw 阶段，没有 pointerInput），所以它盖在
  * 内容区上面不会挡住任何点击。
@@ -46,7 +46,7 @@ fun PropOverlay(
             MotionProp.Arrow -> drawPropArrow(
                 progress = p,
                 recoil = r,
-                from = Offset(size.width + 90.dp.toPx(), blockCenter.y),
+                from = Offset(blockCenter.x + 70.dp.toPx(), blockCenter.y),
                 to = blockCenter,
                 accent = accent
             )
@@ -54,15 +54,15 @@ fun PropOverlay(
             MotionProp.Gear -> drawPropGear(
                 progress = p,
                 recoil = r,
-                from = Offset(blockCenter.x + 240.dp.toPx(), blockCenter.y - 150.dp.toPx()),
-                to = Offset(blockCenter.x, blockCenter.y - 8.dp.toPx()),
+                from = Offset(blockCenter.x + 84.dp.toPx(), blockCenter.y - 52.dp.toPx()),
+                to = Offset(blockCenter.x, blockCenter.y - 2.dp.toPx()),
                 accent = accent
             )
 
             MotionProp.Brush -> drawPropBrush(
                 progress = p,
-                from = Offset(blockCenter.x - 96.dp.toPx(), blockCenter.y - 26.dp.toPx()),
-                to = Offset(blockCenter.x + 34.dp.toPx(), blockCenter.y - 26.dp.toPx()),
+                from = Offset(blockCenter.x - 40.dp.toPx(), blockCenter.y - 12.dp.toPx()),
+                to = Offset(blockCenter.x + 14.dp.toPx(), blockCenter.y - 12.dp.toPx()),
                 accent = accent
             )
 
@@ -93,10 +93,10 @@ private fun DrawScope.drawPropArrow(
     accent: Color
 ) {
     val p = progress.coerceIn(0f, 1f)
-    val len = 54.dp.toPx()
-    val half = 21.dp.toPx()
+    val len = 22.dp.toPx()
+    val half = 9.dp.toPx()
     // 撞上后往右弹开 34dp，同时稍微变淡 —— 给「被顶回来」的方向感。
-    val x = from.x + (to.x - from.x) * p + recoil * 34.dp.toPx()
+    val x = from.x + (to.x - from.x) * p + recoil * 12.dp.toPx()
     val y = from.y + (to.y - from.y) * p
     val tipX = x - len * 0.5f
     val alpha = (1f - 0.35f * recoil).coerceIn(0.3f, 1f)
@@ -120,8 +120,8 @@ private fun DrawScope.drawPropArrow(
         drawLine(
             color = lineColor,
             start = Offset(startX, ly),
-            end = Offset(startX + (22f + i * 13f).dp.toPx(), ly),
-            strokeWidth = 3.dp.toPx(),
+            end = Offset(startX + (7f + i * 5f).dp.toPx(), ly),
+            strokeWidth = 1.6.dp.toPx(),
             cap = StrokeCap.Round
         )
     }
@@ -140,12 +140,12 @@ private fun DrawScope.drawPropGear(
     accent: Color
 ) {
     val p = progress.coerceIn(0f, 1f)
-    val arc = sin(p * PI).toFloat() * 26.dp.toPx()
-    val cx = from.x + (to.x - from.x) * p + recoil * 18.dp.toPx()
+    val arc = sin(p * PI).toFloat() * 9.dp.toPx()
+    val cx = from.x + (to.x - from.x) * p + recoil * 7.dp.toPx()
     val cy = from.y + (to.y - from.y) * p - arc
-    val outer = 23.dp.toPx()
-    val inner = 17.dp.toPx()
-    val hole = 7.dp.toPx()
+    val outer = 11.dp.toPx()
+    val inner = 8.dp.toPx()
+    val hole = 3.4.dp.toPx()
 
     val teeth = Path()
     val points = 32
@@ -172,7 +172,7 @@ private fun DrawScope.drawPropGear(
     // 扣合过程转 45°：从斜插到对正。
     rotate(degrees = -45f + 45f * p, pivot = Offset(cx, cy)) {
         drawPath(gear, accent.copy(alpha = 0.95f))
-        drawPath(gear, Color.White.copy(alpha = 0.18f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
+        drawPath(gear, Color.White.copy(alpha = 0.18f), style = androidx.compose.ui.graphics.drawscope.Stroke(0.8.dp.toPx()))
     }
     // 扣合瞬间的一圈金属反光。用极细的圆环，成本可以忽略。
     if (p > 0.85f) {
@@ -180,7 +180,7 @@ private fun DrawScope.drawPropGear(
             color = Color.White.copy(alpha = 0.30f * (p - 0.85f) / 0.15f),
             radius = inner * 1.28f,
             center = Offset(cx, cy),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx())
+            style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx())
         )
     }
 }
@@ -200,8 +200,8 @@ private fun DrawScope.drawPropBrush(
     val p = progress.coerceIn(0f, 1f)
     val x = from.x + (to.x - from.x) * p
     val y = from.y + (to.y - from.y) * p
-    val w = 34.dp.toPx()
-    val h = 14.dp.toPx()
+    val w = 15.dp.toPx()
+    val h = 6.5.dp.toPx()
 
     // 扫痕压在手底下。
     drawLine(
@@ -238,7 +238,7 @@ private fun DrawScope.drawPropBrush(
 private fun DrawScope.drawShards(t: Float, center: Offset, accent: Color) {
     val count = 12
     val gravity = 900f
-    val baseSpeed = 120.dp.toPx()
+    val baseSpeed = 52.dp.toPx()
     val base = Color(0xFF2E8B57)
 
     for (i in 0 until count) {
@@ -250,7 +250,7 @@ private fun DrawScope.drawShards(t: Float, center: Offset, accent: Color) {
         val x = center.x + cos(angle).toFloat() * speed * local * 1.8f
         val y = center.y + sin(angle).toFloat() * speed * local * 1.8f +
             0.5f * gravity * local * local
-        val size = (7.dp.toPx() * (1f - local * 0.7f)).coerceAtLeast(1f)
+        val size = (3.2.dp.toPx() * (1f - local * 0.7f)).coerceAtLeast(1f)
         val alpha = (1f - local).coerceIn(0f, 1f)
         val color = if (i % 3 == 0) accent.copy(alpha = alpha) else base.copy(alpha = alpha)
         rotate(degrees = local * 220f * if (i % 2 == 0) 1f else -1f, pivot = Offset(x, y)) {
@@ -272,13 +272,13 @@ private fun DrawScope.drawShards(t: Float, center: Offset, accent: Color) {
  */
 private fun DrawScope.drawRibbons(phase: Float, center: Offset, accent: Color) {
     val specs = listOf(
-        Triple(26.dp.toPx(), accent, 0f),
-        Triple(30.dp.toPx(), Color(0xFF22D3A6), 120f),
-        Triple(34.dp.toPx(), Color(0xFFE8C9A0), 240f)
+        Triple(11.dp.toPx(), accent, 0f),
+        Triple(13.dp.toPx(), Color(0xFF22D3A6), 120f),
+        Triple(15.dp.toPx(), Color(0xFFE8C9A0), 240f)
     )
     val tilt = 0.34f
     val seg = 8
-    val stroke = 4.dp.toPx()
+    val stroke = 1.8.dp.toPx()
 
     for ((index, spec) in specs.withIndex()) {
         val (radius, color, offset) = spec

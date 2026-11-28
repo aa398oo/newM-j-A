@@ -28,12 +28,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -68,27 +62,31 @@ import dev.mineport.launcher.ui.downloads.DownloadsScreen
 import dev.mineport.launcher.ui.home.HomeScreen
 import dev.mineport.launcher.ui.instances.InstancesScreen
 import dev.mineport.launcher.ui.more.MoreScreen
-import dev.mineport.launcher.ui.motion.CommandBlock
 import dev.mineport.launcher.ui.motion.LocalAnimationsEnabled
 import dev.mineport.launcher.ui.motion.Motion
 import dev.mineport.launcher.ui.motion.MotionIntent
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.mutableStateMapOf
 import dev.mineport.launcher.ui.motion.LocalMotionStage
 import dev.mineport.launcher.ui.motion.MotionStage
 import dev.mineport.launcher.ui.motion.PropOverlay
+import dev.mineport.launcher.ui.motion.RailGlyph
+import dev.mineport.launcher.ui.motion.RailGlyphIcon
 import dev.mineport.launcher.ui.personalize.PersonalizeScreen
 import dev.mineport.launcher.ui.settings.SettingsScreen
 import dev.mineport.launcher.ui.theme.MonoFontFamily
 import kotlinx.coroutines.launch
 
 /** 左侧导航五项（UX-14）：启动 / 下载 / 设置 / 个性化 / 更多。 */
-private data class NavTab(val route: String, val label: String, val icon: ImageVector)
+private data class NavTab(val route: String, val label: String, val glyph: RailGlyph)
 
 private val navTabs = listOf(
-    NavTab("home", "启动", Icons.Filled.PlayArrow),
-    NavTab("downloads", "下载", Icons.Filled.Download),
-    NavTab("settings", "设置", Icons.Filled.Settings),
-    NavTab("personalize", "个性化", Icons.Filled.Palette),
-    NavTab("more", "更多", Icons.Filled.MoreHoriz)
+    NavTab("home", "启动", RailGlyph.Play),
+    NavTab("downloads", "下载", RailGlyph.Download),
+    NavTab("settings", "设置", RailGlyph.Settings),
+    NavTab("personalize", "个性化", RailGlyph.Palette),
+    NavTab("more", "更多", RailGlyph.More)
 )
 
 /**
@@ -130,8 +128,9 @@ fun RootScreen() {
         navController.navigate("instances")
     }
 
-    // 方块在窗口里的中心；T3 的道具从屏幕右侧飞到它身上。
-    var blockCenter by remember { mutableStateOf(Offset.Zero) }
+    // 每个 rail 图标在窗口里的中心。道具从屏幕右侧飞来时，目标是「当前动作的那个图标」，
+    // 而不是一个额外的方块——UX-22 的六种动画都长在图标自己身上。
+    val glyphCenters = remember { mutableStateMapOf<RailGlyph, Offset>() }
 
     Box(Modifier.fillMaxSize()) {
     CompositionLocalProvider(LocalMotionStage provides stage) {
@@ -140,7 +139,7 @@ fun RootScreen() {
             currentRoute = currentRoute,
             onNavigate = ::navigateTab,
             stage = stage,
-            onBlockCenter = { blockCenter = it }
+            onGlyphCenter = { glyph, center -> glyphCenters[glyph] = center }
         )
         // rail 与内容区之间 1dp 分隔线；比给 rail 加边框省一层绘制。
         Box(
@@ -220,7 +219,7 @@ fun RootScreen() {
         PropOverlay(
             stage = stage,
             accent = MaterialTheme.colorScheme.primary,
-            blockCenter = blockCenter
+            blockCenter = glyphCenters[stage.glyph] ?: Offset.Zero
         )
     }
 }
@@ -230,7 +229,7 @@ private fun NavRail(
     currentRoute: String?,
     onNavigate: (String) -> Unit,
     stage: MotionStage,
-    onBlockCenter: (Offset) -> Unit
+    onGlyphCenter: (RailGlyph, Offset) -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -282,28 +281,23 @@ private fun NavRail(
                 RailItem(
                     tab = tab,
                     selected = selected,
+                    stage = stage,
                     onClick = {
                         onNavigate(tab.route)
-                        // 每个 tab 有自己的道具：下载=箭头、设置=齿轮、其余=撞一下。
+                        // 动画作用在「被点的那个图标」上：下载=箭头撞它、设置=齿轮扣合它、
+                        // 个性化=刷子刷它、其余=压缩+白闪。
                         when (tab.route) {
-                            "downloads" -> stage.play(MotionIntent.DownloadImpact)
-                            "settings" -> stage.play(MotionIntent.SettingsImpact)
-                "personalize" -> stage.play(MotionIntent.PersonalizeBrush)
-                            else -> stage.play(MotionIntent.TabImpact)
+                            "downloads" -> stage.play(MotionIntent.DownloadImpact, tab.glyph)
+                            "settings" -> stage.play(MotionIntent.SettingsImpact, tab.glyph)
+                            "personalize" -> stage.play(MotionIntent.PersonalizeBrush, tab.glyph)
+                            else -> stage.play(MotionIntent.TabImpact, tab.glyph)
                         }
-                    }
+                    },
+                    onCenter = { c -> onGlyphCenter(tab.glyph, c) }
                 )
             }
         }
         Spacer(Modifier.weight(1f))
-        // 方块常驻在 rail 底部：横屏高约 375dp，rail 上方 5 项占 260dp，
-        // 底部这块是唯一不会被内容区抢走的位置。
-        CommandBlock(
-            stage = stage,
-            accent = cs.primary,
-            modifier = Modifier.size(42.dp),
-            onCenter = onBlockCenter
-        )
         Spacer(Modifier.height(2.dp))
         Text(
             text = "v${BuildConfig.VERSION_NAME}-alpha",
@@ -321,7 +315,13 @@ private fun NavRail(
 }
 
 @Composable
-private fun RailItem(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
+private fun RailItem(
+    tab: NavTab,
+    selected: Boolean,
+    stage: MotionStage,
+    onClick: () -> Unit,
+    onCenter: (Offset) -> Unit
+) {
     val cs = MaterialTheme.colorScheme
     val animations = LocalAnimationsEnabled.current
     val spec = tween<androidx.compose.ui.graphics.Color>(if (animations) Motion.SmallMs else 0, easing = Motion.Ease)
@@ -342,7 +342,13 @@ private fun RailItem(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
         animationSpec = tween(if (animations) Motion.RailBarMs else 0, easing = Motion.Ease),
         label = "railBar"
     )
-    Box(Modifier.fillMaxWidth().height(52.dp)) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            // 道具（箭头/齿轮/丝带）要知道往哪儿飞：这里上报图标中心。
+            .onGloballyPositioned { onCenter(it.boundsInRoot().center) }
+    ) {
         // 「左侧贴边 3dp 主蓝色条」：贴的是 rail 自己的左边缘（= 屏幕左边缘 + inset）。
         Box(
             Modifier
@@ -358,10 +364,11 @@ private fun RailItem(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = tab.icon,
-                contentDescription = tab.label,
-                tint = tint,
+            RailGlyphIcon(
+                glyph = tab.glyph,
+                stage = stage,
+                color = tint,
+                accent = cs.primary,
                 modifier = Modifier
                     .size(22.dp)
                     .graphicsLayer {
