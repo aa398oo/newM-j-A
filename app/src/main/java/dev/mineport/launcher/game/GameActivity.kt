@@ -72,6 +72,9 @@ class GameActivity : ComponentActivity() {
 
     private var errorBanner: TextView? = null
 
+    /** 启动阶段的提示层：解包 180MB 运行时 + 建 JVM 要几十秒，这段没有任何字会像卡死。 */
+    private var splash: TextView? = null
+
     /**
      * 把失败原因直接画在屏幕上。
      *
@@ -81,6 +84,7 @@ class GameActivity : ComponentActivity() {
      */
     private fun showBanner(text: String) {
         runOnUiThread {
+            hideSplash()
             val tv = errorBanner ?: TextView(this).apply {
                 setTextColor(0xFFFFFFFF.toInt())
                 textSize = 15f
@@ -106,8 +110,47 @@ class GameActivity : ComponentActivity() {
         "如果反复失败：把本应用从最近任务里划掉再重开（一个进程只能建一次 JVM）；" +
         "仍然不行就把这段文字连同 files/logs 里的日志发给开发者。"
 
+    /**
+     * 启动进度：既要写 logcat，也要让屏幕上有字。
+     *
+     * 首次启动要解包 assets/runtime（182 MB）再起 JVM，真机上动辄 30–60 秒。
+     * 这段时间 Surface 已经占满屏幕但还没人画，用户看到的就是纯黑。
+     */
+    private fun showSplash(text: String) {
+        runOnUiThread {
+            val tv = splash ?: TextView(this).apply {
+                setTextColor(0xFFFFFFFF.toInt())
+                textSize = 16f
+                setPadding(64, 40, 64, 40)
+                setBackgroundColor(0xFF0E1116.toInt())
+                gravity = android.view.Gravity.CENTER
+            }.also { view ->
+                root.addView(
+                    view,
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                )
+                splash = view
+            }
+            tv.text = text
+            tv.visibility = android.view.View.VISIBLE
+        }
+    }
+
+    private fun hideSplash() {
+        runOnUiThread {
+            splash?.let { view ->
+                (view.parent as? android.view.ViewGroup)?.removeView(view)
+            }
+            splash = null
+        }
+    }
+
     private fun status(text: String) {
         Log.i(TAG, text)
+        showSplash(text)
     }
 
     /** 轮盘按下过、还没抬起的动作，避免重复 press/release。 */
@@ -399,6 +442,11 @@ class GameActivity : ComponentActivity() {
         val result = withContext(Dispatchers.IO) { JvmLauncher.start(this@GameActivity, spec) }
         when (result) {
             is JvmStartResult.Ready -> {
+                // 画面交给游戏之前把提示层撤掉；先留 2.5 秒，避免 Nexus 一生效就闪一下黑屏。
+                scope.launch {
+                    kotlinx.coroutines.delay(2500L)
+                    hideSplash()
+                }
                 StartupTrace.mark(this, "jvm-ready:" + result.javaVersion)
                 // JVM 创建后 FCL 的窗口桥才在本进程里可用，补一次 Surface 挂载。
                 BridgeWindow.attach(glView?.holder?.surface)

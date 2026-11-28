@@ -511,6 +511,22 @@ must('Forge 启动前拦缺库',
   mcLauncher,
   /missing\.isNotEmpty\(\) && mainClass\.contains\("bootstraplauncher"[\s\S]{0,400}?Result\.failure/,
   'Forge 主类链要求 classpath 完整，缺库必须说清楚而不是黑屏');
+must('首次启动有进度提示',
+  gameActivity,
+  /private fun showSplash\(text: String\)[\s\S]{0,700}?0xFF0E1116/,
+  '解包 182MB 运行时那几十秒，纯黑屏和卡死没有区别');
+must('启动进度同时上屏',
+  gameActivity,
+  /private fun status\(text: String\) \{\s*\r?\n\s*Log\.i\(TAG, text\)\s*\r?\n\s*showSplash\(text\)/,
+  'status 只写 logcat 等于没提示');
+must('JVM 就绪后撤掉提示层',
+  gameActivity,
+  /is JvmStartResult\.Ready -> \{[\s\S]{0,400}?hideSplash\(\)/,
+  '不撤的话提示层一直盖着游戏画面');
+must('失败横幅顶掉提示层',
+  gameActivity,
+  /private fun showBanner\(text: String\) \{\s*\r?\n\s*runOnUiThread \{\s*\r?\n\s*hideSplash\(\)/,
+  '两个覆盖层叠在一起会互相遮');
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;
