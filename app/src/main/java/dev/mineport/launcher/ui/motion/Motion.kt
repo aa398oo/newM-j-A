@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.TweenSpec
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -30,28 +32,55 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 /**
- * 动效规范（DESIGN-STYLE 第五节）的唯一实现处，避免每个页面各写一套时长与曲线。
+ * 动效规范（UX-20 + DESIGN-STYLE 第五节）的唯一实现处，避免每个页面各写一套时长与曲线。
  *
  * 三条规则：
- * 1. 页面切换：淡入 + 轻微上移，220ms ease-out；
- * 2. 按钮：按下缩放 0.97（涟漪由 Material 自带）；
+ * 1. 短时长、先快后慢：micro 120 / small 180 / medium 260 / large 340，**一律不超过 400ms**；
+ * 2. 灵动靠 spring（按压、选中），平滑靠 ease-out（转场、内容变化）；
  * 3. 加载：三个方块依次呼吸，不用转圈。
  */
 object Motion {
-    /** 页面转场。 */
-    const val ScreenMs = 220
+    /** 按压反馈、图标切换。 */
+    const val MicroMs = 120
+
+    /** 单项内容变化、勾选、chip 切换。 */
+    const val SmallMs = 180
+
+    /** 页面切换、卡片展开、弹层。 */
+    const val MediumMs = 260
+
+    /** 主题切换、全屏转场。 */
+    const val LargeMs = 340
+
+    /** 页面转场（= medium）。保留旧名，调用点不用改。 */
+    const val ScreenMs = MediumMs
+
+    /** 页面退出：比进场短，避免来回拖沓（取 120–180 之间的 150）。 */
+    const val ExitMs = 150
+
+    /** rail 左侧 3dp 蓝条高度动画，UX-20 场景表明确写 220ms。 */
+    const val RailBarMs = 220
 
     /** 列表项入场，每项递增的延迟。 */
-    const val ItemStepMs = 40L
+    const val ItemStepMs = 30L
 
     /** 无限长的列表只给前几项做延迟，否则最后一项要等很久。 */
     const val MaxStagger = 8
 
-    /** 220ms 内先快后慢，比 Material 默认的线性更有“落位感”。 */
+    /** 默认曲线：快进慢出。 */
     val Ease = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
-    /** 按压回弹：阻尼低一点，松手有轻微回弹。 */
-    val PressSpring = spring<Float>(dampingRatio = 0.55f, stiffness = 900f)
+    /** 数值滚动用的强调曲线（EaseOutCubic）。 */
+    val EaseOutCubic = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
+
+    /** 按压回弹：阻尼 0.8 + 中刚度，按下有回落但不晃。 */
+    val PressSpring = spring<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium)
+
+    /** 四档 tween，直接给 animateFloatAsState / Animatable 用。 */
+    val Micro: TweenSpec<Float> = tween(durationMillis = MicroMs, easing = Ease)
+    val Small: TweenSpec<Float> = tween(durationMillis = SmallMs, easing = Ease)
+    val Medium: TweenSpec<Float> = tween(durationMillis = MediumMs, easing = Ease)
+    val Large: TweenSpec<Float> = tween(durationMillis = LargeMs, easing = Ease)
 }
 
 /**
@@ -98,7 +127,7 @@ fun EnterFromBottom(index: Int = 0, content: @Composable () -> Unit) {
             progress.snapTo(1f)
         } else {
             delay(index.coerceIn(0, Motion.MaxStagger) * Motion.ItemStepMs)
-            progress.animateTo(1f, tween(durationMillis = 260, easing = Motion.Ease))
+            progress.animateTo(1f, Motion.Medium)
         }
     }
     Box(

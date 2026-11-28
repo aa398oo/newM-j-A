@@ -179,6 +179,22 @@ must('更多页版本管理', more, /"版本管理"/, '更多页要有版本管�
 must('更多页诊断入口', more, /"诊断与日志"/, '更多页要有诊断入口');
 must('更多页关于信息', more, /AboutCard\(container\.deviceProfile\)/, '更多页展示设备画像');
 
+// —— UX-20 动效令牌 ——
+must('动效四档时长', motion, /MicroMs = 120[\s\S]{0,200}?SmallMs = 180[\s\S]{0,200}?MediumMs = 260[\s\S]{0,200}?LargeMs = 340/,
+  'UX-20 时长表：micro 120 / small 180 / medium 260 / large 340');
+must('页面转场用 medium', motion, /ScreenMs = MediumMs/, '页面切换统一走 260ms，不各写各的');
+must('按压弹簧阻尼 0.8', motion, /PressSpring = spring<Float>\(dampingRatio = 0\.8f/,
+  'UX-20：轻微回弹不晃，阻尼 0.8');
+must('强调曲线 EaseOutCubic', motion, /val EaseOutCubic = CubicBezierEasing\(/, '数值滚动要强调曲线');
+must('rail 选中图标 1.1', rootScreen, /targetValue = if \(selected\) 1\.1f else 1f/, 'UX-20：图标 1.0 → 1.1');
+must('rail 蓝条高度动画', rootScreen, /animateDpAsState\([\s\S]{0,200}?26\.dp else 0\.dp/,
+  'UX-20：3dp 蓝条高度动画，不是硬跳');
+const emptyState = read('app/src/main/java/dev/mineport/launcher/ui/components/EmptyState.kt');
+must('空状态图标弹性入场', emptyState, /spring\(dampingRatio = 0\.62f[\s\S]{0,1200}?0\.375f/,
+  'UX-20：空状态图标 24dp → 64dp 弹性入场');
+must('动效关掉即终态', motion, /if \(!enabled\) \{[\s\S]{0,80}?snapTo\(1f\)/,
+  '关掉动效后不能停在 0 透明度');
+
 let failed = 0;
 for (const check of checks) {
   if (!check.ok) failed += 1;

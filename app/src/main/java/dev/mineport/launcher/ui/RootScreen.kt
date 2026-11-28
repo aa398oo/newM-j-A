@@ -1,6 +1,7 @@
 package dev.mineport.launcher.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -135,13 +136,13 @@ fun RootScreen() {
                     fadeIn(tween(ms, easing = Motion.Ease)) +
                         slideInHorizontally(tween(ms, easing = Motion.Ease)) { it / 24 }
                 },
-                exitTransition = { fadeOut(tween(if (animations) 150 else 0, easing = Motion.Ease)) },
+                exitTransition = { fadeOut(tween(if (animations) Motion.ExitMs else 0, easing = Motion.Ease)) },
                 popEnterTransition = {
                     val ms = if (animations) Motion.ScreenMs else 0
                     fadeIn(tween(ms, easing = Motion.Ease)) +
                         slideInHorizontally(tween(ms, easing = Motion.Ease)) { -it / 24 }
                 },
-                popExitTransition = { fadeOut(tween(if (animations) 150 else 0, easing = Motion.Ease)) }
+                popExitTransition = { fadeOut(tween(if (animations) Motion.ExitMs else 0, easing = Motion.Ease)) }
             ) {
                 composable("home") {
                     HomeScreen(
@@ -223,28 +224,33 @@ private fun NavRail(currentRoute: String?, onNavigate: (String) -> Unit) {
 private fun RailItem(tab: NavTab, selected: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val animations = LocalAnimationsEnabled.current
-    val spec = tween<androidx.compose.ui.graphics.Color>(if (animations) 180 else 0, easing = Motion.Ease)
+    val spec = tween<androidx.compose.ui.graphics.Color>(if (animations) Motion.SmallMs else 0, easing = Motion.Ease)
     val tint by animateColorAsState(
         targetValue = if (selected) cs.primary else cs.onSurfaceVariant,
         animationSpec = spec,
         label = "railTint"
     )
+    // UX-20：图标 1.0 → 1.1 → 1.0，180ms；回弹交给 spring 而不是手写关键帧。
     val scale by animateFloatAsState(
-        targetValue = if (selected) 1.08f else 1f,
-        animationSpec = tween(if (animations) 180 else 0, easing = Motion.Ease),
+        targetValue = if (selected) 1.1f else 1f,
+        animationSpec = if (animations) Motion.PressSpring else tween(0),
         label = "railScale"
     )
+    // 左侧 3dp 蓝条高度动画 220ms：未选中收成 0，切换时是「长出来」而不是硬跳。
+    val barHeight by animateDpAsState(
+        targetValue = if (selected) 26.dp else 0.dp,
+        animationSpec = tween(if (animations) Motion.RailBarMs else 0, easing = Motion.Ease),
+        label = "railBar"
+    )
     Box(Modifier.fillMaxWidth().height(52.dp)) {
-        if (selected) {
-            // 「左侧贴边 3dp 主蓝色条」：贴的是 rail 自己的左边缘（= 屏幕左边缘 + inset）。
-            Box(
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .width(3.dp)
-                    .height(26.dp)
-                    .background(cs.primary, RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
-            )
-        }
+        // 「左侧贴边 3dp 主蓝色条」：贴的是 rail 自己的左边缘（= 屏幕左边缘 + inset）。
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .width(3.dp)
+                .height(barHeight)
+                .background(cs.primary, RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
